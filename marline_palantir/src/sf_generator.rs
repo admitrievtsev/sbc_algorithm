@@ -68,8 +68,8 @@ impl SuperFeatureGenerator for PalantirHasher {
                 for &val in &group {
                     hasher.write_u64(val);
                 }
-                let hash = hasher.finish() as u32;
-                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash, 0));
+                let hash = hasher.finish();
+                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash));
             }
         }
 

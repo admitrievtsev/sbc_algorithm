@@ -8,6 +8,6 @@ pub enum PalantirError {
     #[error("hashing failed: {0}")]
     HashError(String),
 
-    #[error("metadata error: {0}")]
-    MetadataError(String),
+    #[error("metadata manager error: {0}")]
+    MetadataManager(String)
 }
