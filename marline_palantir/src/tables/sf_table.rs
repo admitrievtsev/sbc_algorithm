@@ -5,6 +5,8 @@ pub struct SFTable {
     index: HashMap<SuperFeature, Vec<BlockID>>,
     metric: u64,
 }
+
+#[allow(dead_code)]
 impl SFTable {
     pub fn new(metric: u64) -> Self {
         Self { index: HashMap::new(), metric }

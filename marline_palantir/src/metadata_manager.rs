@@ -14,7 +14,6 @@ pub struct TierConfig {
 pub struct MetadataManager {
     fp_table: FPTable,
     sf_tables: Vec<Vec<SFTable>>,
-    current_version: Version,
     tier_configs: Vec<TierConfig>,
     lifecycle_manager: LifecycleManager,
 }
@@ -25,7 +24,6 @@ impl MetadataManager {
         Self {
             fp_table: FPTable::new(),
             sf_tables,
-            current_version: 0,
             tier_configs,
             lifecycle_manager: LifecycleManager::new(lifecycle_configs),
         }
