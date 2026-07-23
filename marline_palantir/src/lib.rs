@@ -1,5 +1,6 @@
 pub mod error;
 mod fingerprint_generator;
+pub mod lifecycle_manager;
 pub mod metadata_manager;
 pub mod palantir_scrubber;
 pub mod sf_generator;
