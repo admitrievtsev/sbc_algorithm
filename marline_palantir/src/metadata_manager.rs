@@ -119,6 +119,6 @@ impl MetadataManager {
     }
 
     pub fn sf_table_size(&self) -> usize {
-        self.sf_tables.iter().map(|vec| vec.len()).sum()
+        self.sf_tables.iter().flat_map(|vec| vec.iter()).map(|table| table.len()).sum()
     }
 }
