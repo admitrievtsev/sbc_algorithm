@@ -1,10 +1,6 @@
 mod block_id;
 mod chunk;
-mod chunk_hash;
-mod fingerprint;
 mod super_feature;
 pub use block_id::BlockID;
 pub use chunk::Chunk;
-pub use chunk_hash::ChunkDigest;
-pub use fingerprint::{Fingerprint, FingerprintGenerator, Sha256FingerprintGenerator};
 pub use super_feature::{SuperFeature, SuperFeatureGenerator};

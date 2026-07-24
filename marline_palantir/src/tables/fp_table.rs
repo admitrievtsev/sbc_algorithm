@@ -1,25 +1,26 @@
-use crate::types::{BlockID, Fingerprint};
+use crate::types::BlockID;
+use chunkfs::ChunkHash;
 use std::collections::HashMap;
 
-pub struct FPTable {
-    index: HashMap<Fingerprint, BlockID>,
+pub struct FPTable<H: ChunkHash> {
+    index: HashMap<H, BlockID<H>>,
 }
 
 #[allow(dead_code)]
-impl FPTable {
+impl<H: ChunkHash> FPTable<H> {
     pub fn new() -> Self {
         Self { index: HashMap::new() }
     }
-    pub fn contains(&self, fingerprint: &Fingerprint) -> bool {
+    pub fn contains(&self, fingerprint: &H) -> bool {
         self.index.contains_key(fingerprint)
     }
-    pub fn lookup(&self, fingerprint: &Fingerprint) -> Option<&BlockID> {
+    pub fn lookup(&self, fingerprint: &H) -> Option<&BlockID<H>> {
         self.index.get(fingerprint)
     }
-    pub fn insert(&mut self, fingerprint: Fingerprint, block_id: BlockID) {
+    pub fn insert(&mut self, fingerprint: H, block_id: BlockID<H>) {
         self.index.insert(fingerprint, block_id);
     }
-    pub fn remove(&mut self, fingerprint: &Fingerprint) -> Option<BlockID> {
+    pub fn remove(&mut self, fingerprint: &H) -> Option<BlockID<H>> {
         self.index.remove(fingerprint)
     }
     pub fn len(&self) -> usize {
