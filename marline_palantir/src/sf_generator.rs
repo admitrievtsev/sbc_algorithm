@@ -70,7 +70,7 @@ impl SuperFeatureGenerator for PalantirHasher {
                     hasher.write_u64(val);
                 }
                 let hash = hasher.finish();
-                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash));
+                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash as u32));
             }
         }
 

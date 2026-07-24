@@ -10,12 +10,12 @@ use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator};
 use marline_index::index::store::IndexStorage;
 use marline_index::index::InvertedSketchIndex;
 use marline_index::index::SketchIndexApi;
-use marline_index::sketch::{FixedSketch, U64Sketch};
+use marline_index::sketch::{FixedSketch, U32Sketch};
 
 pub struct Index<H: Clone + Eq + Hash + Send + Sync> {
-    tier1: InvertedSketchIndex<H, U64Sketch<3>, IndexStorage<H, U64Sketch<3>>>,
-    tier2: InvertedSketchIndex<H, U64Sketch<4>, IndexStorage<H, U64Sketch<4>>>,
-    tier3: InvertedSketchIndex<H, U64Sketch<6>, IndexStorage<H, U64Sketch<6>>>,
+    tier1: InvertedSketchIndex<H, U32Sketch<3>, IndexStorage<H, U32Sketch<3>>>,
+    tier2: InvertedSketchIndex<H, U32Sketch<4>, IndexStorage<H, U32Sketch<4>>>,
+    tier3: InvertedSketchIndex<H, U32Sketch<6>, IndexStorage<H, U32Sketch<6>>>,
 }
 
 impl<H: Clone + Eq + Hash + Send + Sync> Index<H> {
@@ -32,10 +32,10 @@ impl<H: Clone + Eq + Hash + Send + Sync> Index<H> {
 
     fn split_into_sketches(
         sfs: &[SuperFeature],
-    ) -> Option<(U64Sketch<3>, U64Sketch<4>, U64Sketch<6>)> {
-        let t1: Vec<u64> = sfs.iter().filter(|sf| sf.tier_id() == 0).map(|sf| sf.hash()).collect();
-        let t2: Vec<u64> = sfs.iter().filter(|sf| sf.tier_id() == 1).map(|sf| sf.hash()).collect();
-        let t3: Vec<u64> = sfs.iter().filter(|sf| sf.tier_id() == 2).map(|sf| sf.hash()).collect();
+    ) -> Option<(U32Sketch<3>, U32Sketch<4>, U32Sketch<6>)> {
+        let t1: Vec<u32> = sfs.iter().filter(|sf| sf.tier_id() == 0).map(|sf| sf.value()).collect();
+        let t2: Vec<u32> = sfs.iter().filter(|sf| sf.tier_id() == 1).map(|sf| sf.value()).collect();
+        let t3: Vec<u32> = sfs.iter().filter(|sf| sf.tier_id() == 2).map(|sf| sf.value()).collect();
 
         Some((
             FixedSketch::new(t1.try_into().ok()?).ok()?,

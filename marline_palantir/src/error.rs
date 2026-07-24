@@ -9,5 +9,5 @@ pub enum PalantirError {
     HashError(String),
 
     #[error("metadata manager error: {0}")]
-    MetadataManager(String)
+    MetadataManager(String),
 }

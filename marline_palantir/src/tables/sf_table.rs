@@ -38,7 +38,7 @@ impl SFTable {
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
     }
-    // надо сделать
+    // top_k(1) из индекса
     pub fn nearest(&self, _features: &[SuperFeature]) -> Option<BlockID> {
         None
     }
