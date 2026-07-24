@@ -36,12 +36,13 @@ impl PalantirHasher {
 
 impl SuperFeatureGenerator for PalantirHasher {
     fn generate(&self, chunk: &Chunk) -> Vec<crate::types::SuperFeature> {
+        let data = chunk.as_bytes();
         let mut features = vec![u64::MAX; self.features_num];
 
         let mask = (1u64 << self.sampling_rate) - 1;
         let mut fp = 0u64;
 
-        for &byte in chunk.as_bytes() {
+        for &byte in data {
             fp = (fp << 1).wrapping_add(GEAR[byte as usize]);
 
             if fp & mask == 0 {
@@ -69,7 +70,7 @@ impl SuperFeatureGenerator for PalantirHasher {
                     hasher.write_u64(val);
                 }
                 let hash = hasher.finish();
-                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash));
+                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash as u32));
             }
         }
 

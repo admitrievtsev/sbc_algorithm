@@ -5,6 +5,7 @@ pub struct FPTable {
     index: HashMap<Fingerprint, BlockID>,
 }
 
+#[allow(dead_code)]
 impl FPTable {
     pub fn new() -> Self {
         Self { index: HashMap::new() }

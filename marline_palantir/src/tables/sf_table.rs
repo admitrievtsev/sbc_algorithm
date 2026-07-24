@@ -3,10 +3,13 @@ use std::collections::HashMap;
 
 pub struct SFTable {
     index: HashMap<SuperFeature, Vec<BlockID>>,
+    metric: u64,
 }
+
+#[allow(dead_code)]
 impl SFTable {
-    pub fn new() -> Self {
-        Self { index: HashMap::new() }
+    pub fn new(metric: u64) -> Self {
+        Self { index: HashMap::new(), metric }
     }
     pub fn insert(&mut self, block_id: &BlockID, features: &[SuperFeature]) {
         for &super_feature in features {
@@ -34,5 +37,15 @@ impl SFTable {
     }
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
+    }
+    // top_k(1) из индекса
+    pub fn nearest(&self, _features: &[SuperFeature]) -> Option<BlockID> {
+        None
+    }
+    pub fn update_metric(&mut self, upd_fn: fn(u64) -> u64) {
+        self.metric = upd_fn(self.metric)
+    }
+    pub fn get_metric(&self) -> u64 {
+        self.metric
     }
 }
