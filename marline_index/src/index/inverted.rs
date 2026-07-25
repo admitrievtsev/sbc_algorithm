@@ -45,6 +45,11 @@ where
         }
         Ok(())
     }
+
+    /// Returns all keys whose sketch contains the given feature.
+    pub fn keys_with_feature(&self, feature: S::Feature) -> Result<Vec<K>, IndexError> {
+        self.store.posting_list(feature)
+    }
 }
 
 impl<K, S, ST> SketchIndexApi<K, S> for InvertedSketchIndex<K, S, ST>
