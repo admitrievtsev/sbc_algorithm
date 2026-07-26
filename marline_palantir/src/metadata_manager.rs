@@ -2,43 +2,139 @@ use crate::lifecycle_manager::{LifecycleManager, LifecycleTierConfig};
 use crate::tables::{FPTable, SFTable};
 use crate::types::{BlockID, SuperFeature};
 use chunkfs::ChunkHash;
+use marline_index::index::{IndexError, Metric};
 
 pub type Version = u64;
 pub type TierID = u8;
 
-#[derive(Clone, Debug)]
-pub struct TierConfig {
-    pub tier_id: TierID,
-    pub k: usize, // Number of super-features per block in this tier
+type TierConfig = u8; // Number of super-features per block in this tier
+
+pub enum AnySFTable<H: ChunkHash + Send + Sync> {
+    T2(SFTable<H, 2>),
+    T3(SFTable<H, 3>),
+    T4(SFTable<H, 4>),
+    T6(SFTable<H, 6>),
+    T12(SFTable<H, 12>),
 }
 
-pub struct MetadataManager<H: ChunkHash> {
+impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
+    pub fn from_index(index: u8) -> Option<Self> {
+        match index {
+            2 => Some(Self::T2(SFTable::new())),
+            3 => Some(Self::T3(SFTable::new())),
+            4 => Some(Self::T4(SFTable::new())),
+            6 => Some(Self::T6(SFTable::new())),
+            12 => Some(Self::T12(SFTable::new())),
+            _ => None,
+        }
+    }
+
+    pub fn nearest(&self, features: &[SuperFeature]) -> Option<BlockID<H>> {
+        match self {
+            Self::T2(t) => t.nearest(features),
+            Self::T3(t) => t.nearest(features),
+            Self::T4(t) => t.nearest(features),
+            Self::T6(t) => t.nearest(features),
+            Self::T12(t) => t.nearest(features),
+        }
+    }
+
+    pub fn insert(&mut self, block_id: &BlockID<H>, features: &[SuperFeature], metric: Metric) {
+        match self {
+            Self::T2(t) => t.insert(block_id, features, metric),
+            Self::T3(t) => t.insert(block_id, features, metric),
+            Self::T4(t) => t.insert(block_id, features, metric),
+            Self::T6(t) => t.insert(block_id, features, metric),
+            Self::T12(t) => t.insert(block_id, features, metric),
+        }
+    }
+
+    pub fn remove_block(&mut self, block_id: &BlockID<H>) {
+        match self {
+            Self::T2(t) => t.remove_block(block_id),
+            Self::T3(t) => t.remove_block(block_id),
+            Self::T4(t) => t.remove_block(block_id),
+            Self::T6(t) => t.remove_block(block_id),
+            Self::T12(t) => t.remove_block(block_id),
+        }
+    }
+
+    pub fn remove_sf(&mut self, feature: &SuperFeature) {
+        match self {
+            Self::T2(t) => t.remove_sf(feature),
+            Self::T3(t) => t.remove_sf(feature),
+            Self::T4(t) => t.remove_sf(feature),
+            Self::T6(t) => t.remove_sf(feature),
+            Self::T12(t) => t.remove_sf(feature),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::T2(t) => t.len(),
+            Self::T3(t) => t.len(),
+            Self::T4(t) => t.len(),
+            Self::T6(t) => t.len(),
+            Self::T12(t) => t.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::T2(t) => t.is_empty(),
+            Self::T3(t) => t.is_empty(),
+            Self::T4(t) => t.is_empty(),
+            Self::T6(t) => t.is_empty(),
+            Self::T12(t) => t.is_empty(),
+        }
+    }
+
+    pub fn get_with_upd_metric(
+        &self,
+        features: &[SuperFeature],
+        f: impl FnOnce(Metric) -> Metric,
+    ) -> Option<BlockID<H>> {
+        match self {
+            Self::T2(t) => t.get_with_upd_metric(features, f),
+            Self::T3(t) => t.get_with_upd_metric(features, f),
+            Self::T4(t) => t.get_with_upd_metric(features, f),
+            Self::T6(t) => t.get_with_upd_metric(features, f),
+            Self::T12(t) => t.get_with_upd_metric(features, f),
+        }
+    }
+
+    pub fn update_and_clean(
+        &self,
+        update_fn: impl FnMut(Metric) -> Metric,
+        cleanup_fn: impl Fn(Metric) -> bool,
+    ) -> Result<(), IndexError> {
+        match self {
+            Self::T2(t) => t.update_and_clean(update_fn, cleanup_fn),
+            Self::T3(t) => t.update_and_clean(update_fn, cleanup_fn),
+            Self::T4(t) => t.update_and_clean(update_fn, cleanup_fn),
+            Self::T6(t) => t.update_and_clean(update_fn, cleanup_fn),
+            Self::T12(t) => t.update_and_clean(update_fn, cleanup_fn),
+        }
+    }
+}
+
+pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
     fp_table: FPTable<H>,
-    sf_tables: Vec<Vec<SFTable<H>>>,
-    tier_configs: Vec<TierConfig>,
-    lifecycle_manager: LifecycleManager,
+    sf_tables: [AnySFTable<H>; N],
+    tier_configs: [TierConfig; N],
+    lifecycle_manager: LifecycleManager<N>,
 }
 
-impl<H: ChunkHash> MetadataManager<H> {
-    pub fn new(tier_configs: Vec<TierConfig>, lifecycle_configs: Vec<LifecycleTierConfig>) -> Self {
-        let sf_tables: Vec<Vec<SFTable<H>>> = (0..tier_configs.len()).map(|_| Vec::new()).collect();
+impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
+    pub fn new(tier_configs: [TierConfig; N], lifecycle_configs: [LifecycleTierConfig; N]) -> Self {
+        let sf_tables: [AnySFTable<H>; N] =
+            std::array::from_fn(|i| AnySFTable::from_index(tier_configs[i]).unwrap());
         Self {
             fp_table: FPTable::<H>::new(),
             sf_tables,
             tier_configs,
             lifecycle_manager: LifecycleManager::new(lifecycle_configs),
         }
-    }
-
-    pub fn default() -> Self {
-        Self::new(
-            vec![
-                TierConfig { tier_id: 0, k: 3 },
-                TierConfig { tier_id: 1, k: 4 },
-                TierConfig { tier_id: 2, k: 6 },
-            ],
-            LifecycleManager::default_configs(),
-        )
     }
 
     /// Function for accurate deduplication
@@ -48,77 +144,52 @@ impl<H: ChunkHash> MetadataManager<H> {
 
     /// Function of searching for base block tier-by-tier
     pub fn lookup_super_features(
-        &mut self,
+        &self,
         super_features: &[SuperFeature],
     ) -> Option<(BlockID<H>, TierID)> {
-        let mut first_index;
-        let mut last_index = 0;
+        let mut first_index: usize;
+        let mut last_index: usize = 0;
 
         for i in 0..self.tier_configs.len() {
             first_index = last_index;
-            last_index += self.tier_configs[i].k;
+            last_index += self.tier_configs[i] as usize;
             let slice = &super_features[first_index..last_index];
 
-            for table in &mut self.sf_tables[i] {
-                if let Some(block) = table.nearest(slice) {
-                    table.update_metric(self.lifecycle_manager.tier_after_use_upd_fn(i as TierID));
-                    return Some((block, i as TierID));
-                }
+            let table = &self.sf_tables[i];
+            if let Some(block) = table
+                .get_with_upd_metric(slice, self.lifecycle_manager.tier_after_use_upd_fn(i as u8))
+            {
+                return Some((block, i as TierID));
             }
         }
         None
     }
 
     /// Add the block: FP + SF for all tiers
-    pub fn add_block(
-        &mut self,
-        fingerprint: H,
-        super_features: &[SuperFeature],
-        version: Version,
-    ) {
+    pub fn add_block(&mut self, fingerprint: H, super_features: &[SuperFeature], version: Version) {
         let block_id = BlockID::<H>::new(fingerprint.clone(), version);
         self.fp_table.insert(fingerprint, block_id.clone());
-        let mut by_tier: Vec<Vec<SuperFeature>> = vec![Vec::new(); self.tier_configs.len()];
-        for sf in super_features {
-            by_tier[sf.tier_id() as usize].push(*sf);
-        }
-        for tier_id in 0..self.tier_configs.len() {
-            if !by_tier[tier_id].is_empty() {
-                self.sf_tables[tier_id][0].insert(&block_id, &by_tier[tier_id]);
-            }
-        }
-        for super_feature in super_features {
-            let tier_id = super_feature.tier_id();
-            for sf_table in &mut self.sf_tables[tier_id as usize][1..] {
-                sf_table.remove_sf(super_feature);
-            }
+
+        let mut first_index: usize;
+        let mut last_index: usize = 0;
+
+        for i in 0..self.tier_configs.len() {
+            first_index = last_index;
+            last_index += self.tier_configs[i] as usize;
+            let slice = &super_features[first_index..last_index];
+            let metric = self.lifecycle_manager.default_tier_metric(i as TierID);
+            self.sf_tables[i].insert(&block_id, slice, metric);
         }
     }
 
-    /// To start new version of backup
-    pub fn start_version(&mut self) {
-        for (tier_id, tier_table) in self.sf_tables.iter_mut().enumerate() {
-            tier_table.insert(
-                0,
-                SFTable::<H>::new(
-                    tier_id as u8,
-                    self.lifecycle_manager.default_tier_metric(tier_id as TierID),
-                ),
-            );
-        }
-    }
-
-    /// Finish version: delete all old SF-tables with lifecycle
-    pub fn finish_version(&mut self) {
-        for (id, vec) in self.sf_tables.iter_mut().enumerate() {
+    /// Finish version: update lifecycle metrics and remove expired entries
+    pub fn finish_version(&self) -> Result<(), IndexError> {
+        for (id, table) in self.sf_tables.iter().enumerate() {
             let upd_fn = self.lifecycle_manager.tier_between_backups_upd_fn(id as TierID);
             let filter_fn = self.lifecycle_manager.tier_drop_or_not_fn(id as TierID);
-
-            vec.retain_mut(|table| {
-                table.update_metric(upd_fn);
-                filter_fn(table.get_metric())
-            });
+            table.update_and_clean(upd_fn, filter_fn)?;
         }
+        Ok(())
     }
 
     pub fn fp_table_size(&self) -> usize {
@@ -126,6 +197,12 @@ impl<H: ChunkHash> MetadataManager<H> {
     }
 
     pub fn sf_table_size(&self) -> usize {
-        self.sf_tables.iter().flat_map(|vec| vec.iter()).map(|table| table.len()).sum()
+        self.sf_tables.iter().map(|table| table.len()).sum()
+    }
+}
+
+impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
+    pub fn default() -> Self {
+        Self::new([3, 4, 6], LifecycleManager::default_configs())
     }
 }

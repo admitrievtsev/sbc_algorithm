@@ -11,10 +11,15 @@ use crate::sketch::Sketch;
 pub use error::IndexError;
 #[allow(deprecated)]
 pub use inverted::{InvertedSketchIndex, PalantirIndex};
+pub use metrics::MetricsApi;
 
 mod error;
 mod inverted;
+mod metrics;
 pub mod store;
+
+/// Per-key metric value stored alongside sketches.
+pub type Metric = u8;
 
 /// A key-value index with similarity search via sketches.
 ///

@@ -4,6 +4,7 @@
 //! retention policy. It stores sketches by key and posting lists by feature.
 
 use crate::index::error::IndexError;
+use crate::index::Metric;
 use crate::sketch::Sketch;
 
 pub mod index_storage;
@@ -52,8 +53,23 @@ where
     fn clear_postings(&self) -> Result<(), IndexError>;
 }
 
+pub trait MetricsStorage<K>: Send + Sync
+where
+    K: Clone + Send + Sync,
+{
+    fn get_metric(&self, key: &K) -> Result<Option<Metric>, IndexError>;
+    fn set_metric(&self, key: &K, value: Metric) -> Result<Option<Metric>, IndexError>;
+    fn clear_metrics(&self) -> Result<(), IndexError>;
+    fn update_and_clean(
+        &self,
+        update_fn: &mut dyn FnMut(&mut Metric),
+        cleanup_fn: &dyn Fn(Metric) -> bool,
+    ) -> Result<(), IndexError>;
+}
+
 /// Complete storage backend required by [`crate::index::InvertedSketchIndex`].
-pub trait Store<K, S>: SketchStorage<K, S> + InvertedStorage<K, S::Feature>
+pub trait Store<K, S>:
+    SketchStorage<K, S> + InvertedStorage<K, S::Feature> + MetricsStorage<K>
 where
     K: Clone + Send + Sync,
     S: Sketch,
@@ -64,6 +80,6 @@ impl<K, S, T> Store<K, S> for T
 where
     K: Clone + Send + Sync,
     S: Sketch,
-    T: SketchStorage<K, S> + InvertedStorage<K, S::Feature>,
+    T: SketchStorage<K, S> + InvertedStorage<K, S::Feature> + MetricsStorage<K>,
 {
 }

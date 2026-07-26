@@ -1,5 +1,6 @@
 use crate::index::error::IndexError;
-use crate::index::store::{InvertedStorage, SketchStorage};
+use crate::index::store::{InvertedStorage, MetricsStorage, SketchStorage};
+use crate::index::Metric;
 use crate::sketch::Sketch;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -7,7 +8,7 @@ use std::sync::RwLock;
 
 /// In-memory storage backend backed by `RwLock`-protected maps.
 pub struct IndexStorage<K, S: Sketch> {
-    sketches: RwLock<HashMap<K, S>>,
+    sketches: RwLock<HashMap<K, (S, Metric)>>,
     postings: RwLock<HashMap<S::Feature, HashSet<K>>>,
 }
 
@@ -37,7 +38,7 @@ where
             .sketches
             .read()
             .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
-        Ok(sketches.get(key).cloned())
+        Ok(sketches.get(key).map(|(s, _)| s.clone()))
     }
 
     fn put_sketch(&self, key: K, sketch: S) -> Result<Option<S>, IndexError> {
@@ -45,7 +46,8 @@ where
             .sketches
             .write()
             .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
-        Ok(sketches.insert(key, sketch))
+        let prev_metric = sketches.get(&key).map(|(_, m)| *m).unwrap_or(0);
+        Ok(sketches.insert(key, (sketch, prev_metric)).map(|(s, _)| s))
     }
 
     fn remove_sketch(&self, key: &K) -> Result<Option<S>, IndexError> {
@@ -53,7 +55,7 @@ where
             .sketches
             .write()
             .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
-        Ok(sketches.remove(key))
+        Ok(sketches.remove(key).map(|(s, _)| s))
     }
 
     fn len_sketches(&self) -> Result<usize, IndexError> {
@@ -125,6 +127,87 @@ where
             .write()
             .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
         postings.clear();
+        Ok(())
+    }
+}
+
+impl<K, S> MetricsStorage<K> for IndexStorage<K, S>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+    S: Sketch,
+{
+    fn get_metric(&self, key: &K) -> Result<Option<Metric>, IndexError> {
+        let sketches = self
+            .sketches
+            .read()
+            .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
+        Ok(sketches.get(key).map(|(_, m)| *m))
+    }
+
+    fn set_metric(&self, key: &K, value: Metric) -> Result<Option<Metric>, IndexError> {
+        let mut sketches = self
+            .sketches
+            .write()
+            .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
+        Ok(sketches.get_mut(key).map(|(_, m)| std::mem::replace(m, value)))
+    }
+
+    fn clear_metrics(&self) -> Result<(), IndexError> {
+        let mut sketches = self
+            .sketches
+            .write()
+            .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
+        for (_, metric) in sketches.values_mut() {
+            *metric = 0;
+        }
+        Ok(())
+    }
+
+    fn update_and_clean(
+        &self,
+        update_fn: &mut dyn FnMut(&mut Metric),
+        cleanup_fn: &dyn Fn(Metric) -> bool,
+    ) -> Result<(), IndexError> {
+        let mut sketches = self
+            .sketches
+            .write()
+            .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
+
+        for (_, metric) in sketches.values_mut() {
+            update_fn(metric);
+        }
+
+        let to_remove: Vec<(K, S)> = sketches
+            .iter()
+            .filter(|(_, (_, m))| cleanup_fn(*m))
+            .map(|(k, (s, _))| (k.clone(), s.clone()))
+            .collect();
+
+        if to_remove.is_empty() {
+            return Ok(());
+        }
+
+        for (key, _) in &to_remove {
+            sketches.remove(key);
+        }
+
+        drop(sketches);
+
+        let mut postings = self
+            .postings
+            .write()
+            .map_err(|_| IndexError::InternalInvariantViolation(String::from("rwlock poisoned")))?;
+        for (key, sketch) in &to_remove {
+            for feature in sketch.iter() {
+                if let Some(keys) = postings.get_mut(&feature) {
+                    keys.remove(key);
+                    if keys.is_empty() {
+                        postings.remove(&feature);
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }

@@ -1,3 +1,4 @@
+use crate::index::metrics::MetricsApi;
 use crate::index::store::Store;
 use crate::index::{IndexError, SketchIndexApi};
 use crate::sketch::{SimilarityScore, Sketch};
@@ -49,6 +50,31 @@ where
     /// Returns all keys whose sketch contains the given feature.
     pub fn keys_with_feature(&self, feature: S::Feature) -> Result<Vec<K>, IndexError> {
         self.store.posting_list(feature)
+    }
+
+    /// Finds the nearest key for the given query and applies `f` to its metric.
+    ///
+    /// Returns the key if found and the index is non-empty, `None` otherwise.
+    pub fn get_with_upd_metric(
+        &self,
+        query: &S,
+        f: impl FnOnce(crate::index::Metric) -> crate::index::Metric,
+    ) -> Result<Option<K>, IndexError> {
+        let key = match self.top_k(query, 1)?.into_iter().next() {
+            Some((key, _)) => key,
+            None => return Ok(None),
+        };
+        let current = self.store.get_metric(&key)?.unwrap_or(0);
+        self.store.set_metric(&key, f(current))?;
+        Ok(Some(key))
+    }
+
+    pub fn update_and_clean(
+        &self,
+        mut update_fn: impl FnMut(crate::index::Metric) -> crate::index::Metric,
+        cleanup_fn: impl Fn(crate::index::Metric) -> bool,
+    ) -> Result<(), IndexError> {
+        self.store.update_and_clean(&mut |m| *m = update_fn(*m), &cleanup_fn)
     }
 }
 
@@ -127,6 +153,27 @@ where
     fn clear(&self) -> Result<(), Self::Error> {
         self.store.clear_sketches()?;
         self.store.clear_postings()
+    }
+}
+
+impl<K, S, ST> MetricsApi<K> for InvertedSketchIndex<K, S, ST>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+    S: Sketch,
+    ST: Store<K, S>,
+{
+    type Error = IndexError;
+
+    fn get_metric(&self, key: &K) -> Result<Option<crate::index::Metric>, Self::Error> {
+        self.store.get_metric(key)
+    }
+
+    fn set_metric(
+        &self,
+        key: &K,
+        value: crate::index::Metric,
+    ) -> Result<Option<crate::index::Metric>, Self::Error> {
+        self.store.set_metric(key, value)
     }
 }
 
