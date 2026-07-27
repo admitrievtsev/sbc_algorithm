@@ -32,5 +32,5 @@
 //! [`InvertedSketchIndex`]: index::InvertedSketchIndex
 
 pub mod index;
-pub mod sketch;
 pub mod simple_storage;
+pub mod sketch;

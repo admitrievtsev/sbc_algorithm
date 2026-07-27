@@ -13,7 +13,6 @@ use marline_index::index::InvertedSketchIndex;
 use marline_index::index::SketchIndexApi;
 use marline_index::sketch::{FixedSketch, U32Sketch};
 
-
 fn lcm_checked(a: u32, b: u32) -> Option<u32> {
     let gcd_val = gcd(a, b);
     (a / gcd_val).checked_mul(b)
@@ -99,7 +98,7 @@ impl<H: Clone + Eq + Hash + Send + Sync + 'static> Index<H> {
 
 impl<H: Clone + Eq + Hash + Send + Sync + 'static> Default for Index<H> {
     fn default() -> Self {
-        Self::new(&TierConfig::new(vec![4,3,2]))
+        Self::new(&TierConfig::new(vec![4, 3, 2]))
     }
 }
 
@@ -110,7 +109,8 @@ impl<H: Clone + Eq + Hash + Send + Sync + 'static> Index<H> {
     /// found, or `None` if no similar chunk exists in any tier.
     pub fn search(&self, sfs: &[SuperFeature]) -> Option<H> {
         for (tier_idx, tier) in self.tiers.iter().enumerate() {
-            let values: Vec<u32> = sfs.iter()
+            let values: Vec<u32> = sfs
+                .iter()
                 .filter(|sf| sf.tier_id() == tier_idx as u8)
                 .map(|sf| sf.value())
                 .collect();
@@ -124,7 +124,8 @@ impl<H: Clone + Eq + Hash + Send + Sync + 'static> Index<H> {
     /// Inserts a chunk hash indexed by its super-features into all tiers.
     pub fn insert(&self, sfs: &[SuperFeature], hash: H) {
         for (tier_idx, tier) in self.tiers.iter().enumerate() {
-            let values: Vec<u32> = sfs.iter()
+            let values: Vec<u32> = sfs
+                .iter()
                 .filter(|sf| sf.tier_id() == tier_idx as u8)
                 .map(|sf| sf.value())
                 .collect();

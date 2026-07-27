@@ -12,8 +12,8 @@ pub use inverted::InvertedSketchIndex;
 
 mod error;
 mod inverted;
-pub mod store;
 pub mod metrics;
+pub mod store;
 
 /// A sketch-based similarity search index.
 ///
