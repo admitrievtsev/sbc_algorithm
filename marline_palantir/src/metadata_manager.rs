@@ -1,13 +1,106 @@
 use crate::lifecycle_manager::{LifecycleManager, LifecycleTierConfig};
 use crate::tables::{FPTable, SFTable};
-use crate::types::{BlockID, SuperFeature};
+use crate::types::{BlockID, SuperFeature, TierConfig};
 use chunkfs::ChunkHash;
-use marline_index::index::{IndexError, Metric};
+use marline_index::index::metrics::Metric;
+use marline_index::index::IndexError;
 
 pub type Version = u64;
 pub type TierID = u8;
 
-type TierConfig = u8; // Number of super-features per block in this tier
+/// Metadata management for the Palantir deduplication pipeline.
+///
+/// This module will track chunk metadata such as versioning, base-chunk
+/// relationships, and scrub statistics.  Currently a placeholder.
+pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
+    fp_table: FPTable<H>,
+    sf_tables: [AnySFTable<H>; N],
+    tier_config: TierConfig<N>,
+    lifecycle_manager: LifecycleManager<N>,
+}
+
+impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
+    pub fn new(tier_config: TierConfig<N>, lifecycle_configs: [LifecycleTierConfig; N]) -> Self {
+        let sf_tables: [AnySFTable<H>; N] = std::array::from_fn(|i| {
+            AnySFTable::from_index(tier_config.tier_list[i]).expect("Invalid tier index")
+        });
+        Self {
+            fp_table: FPTable::<H>::new(),
+            sf_tables,
+            tier_config,
+            lifecycle_manager: LifecycleManager::new(lifecycle_configs),
+        }
+    }
+
+    /// Function for accurate deduplication
+    pub fn lookup_fingerprint(&self, fingerprint: &H) -> Option<&BlockID<H>> {
+        self.fp_table.lookup(fingerprint)
+    }
+
+    /// Function of searching for base block tier-by-tier
+    pub fn lookup_super_features(
+        &self,
+        super_features: &[SuperFeature],
+    ) -> Option<(BlockID<H>, TierID)> {
+        let mut first_index: usize;
+        let mut last_index: usize = 0;
+
+        for i in 0..N {
+            first_index = last_index;
+            last_index += self.tier_config.tier_list[i] as usize;
+            let slice = &super_features[first_index..last_index];
+
+            let table = &self.sf_tables[i];
+            if let Some(block) = table
+                .get_with_upd_metric(slice, self.lifecycle_manager.tier_after_use_upd_fn(i as u8))
+            {
+                return Some((block, i as TierID));
+            }
+        }
+        None
+    }
+
+    /// Add the block: FP + SF for all tiers
+    pub fn add_block(&mut self, fingerprint: H, super_features: &[SuperFeature], version: Version) {
+        let block_id = BlockID::<H>::new(fingerprint.clone(), version);
+        self.fp_table.insert(fingerprint, block_id.clone());
+
+        let mut first_index: usize;
+        let mut last_index: usize = 0;
+
+        for i in 0..N {
+            first_index = last_index;
+            last_index += self.tier_config.tier_list[i] as usize;
+            let slice = &super_features[first_index..last_index];
+            let metric = self.lifecycle_manager.default_tier_metric(i as TierID);
+            self.sf_tables[i].insert(&block_id, slice, metric);
+        }
+    }
+
+    /// Finish version: update lifecycle metrics and remove expired entries
+    pub fn finish_version(&self) -> Result<(), IndexError> {
+        for (id, table) in self.sf_tables.iter().enumerate() {
+            let upd_fn = self.lifecycle_manager.tier_between_backups_upd_fn(id as TierID);
+            let filter_fn = self.lifecycle_manager.tier_drop_or_not_fn(id as TierID);
+            table.update_and_clean(upd_fn, filter_fn)?;
+        }
+        Ok(())
+    }
+
+    pub fn fp_table_size(&self) -> usize {
+        self.fp_table.len()
+    }
+
+    pub fn sf_table_size(&self) -> usize {
+        self.sf_tables.iter().map(|table| table.len()).sum()
+    }
+}
+
+impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
+    pub fn default() -> Self {
+        Self::new(TierConfig::new([3, 4, 6]), LifecycleManager::default_configs())
+    }
+}
 
 pub enum AnySFTable<H: ChunkHash + Send + Sync> {
     T2(SFTable<H, 2>),
@@ -18,7 +111,7 @@ pub enum AnySFTable<H: ChunkHash + Send + Sync> {
 }
 
 impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
-    pub fn from_index(index: u8) -> Option<Self> {
+    pub fn from_index(index: u32) -> Option<Self> {
         match index {
             2 => Some(Self::T2(SFTable::new())),
             3 => Some(Self::T3(SFTable::new())),
@@ -46,26 +139,6 @@ impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
             Self::T4(t) => t.insert(block_id, features, metric),
             Self::T6(t) => t.insert(block_id, features, metric),
             Self::T12(t) => t.insert(block_id, features, metric),
-        }
-    }
-
-    pub fn remove_block(&mut self, block_id: &BlockID<H>) {
-        match self {
-            Self::T2(t) => t.remove_block(block_id),
-            Self::T3(t) => t.remove_block(block_id),
-            Self::T4(t) => t.remove_block(block_id),
-            Self::T6(t) => t.remove_block(block_id),
-            Self::T12(t) => t.remove_block(block_id),
-        }
-    }
-
-    pub fn remove_sf(&mut self, feature: &SuperFeature) {
-        match self {
-            Self::T2(t) => t.remove_sf(feature),
-            Self::T3(t) => t.remove_sf(feature),
-            Self::T4(t) => t.remove_sf(feature),
-            Self::T6(t) => t.remove_sf(feature),
-            Self::T12(t) => t.remove_sf(feature),
         }
     }
 
@@ -115,94 +188,5 @@ impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
             Self::T6(t) => t.update_and_clean(update_fn, cleanup_fn),
             Self::T12(t) => t.update_and_clean(update_fn, cleanup_fn),
         }
-    }
-}
-
-pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
-    fp_table: FPTable<H>,
-    sf_tables: [AnySFTable<H>; N],
-    tier_configs: [TierConfig; N],
-    lifecycle_manager: LifecycleManager<N>,
-}
-
-impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
-    pub fn new(tier_configs: [TierConfig; N], lifecycle_configs: [LifecycleTierConfig; N]) -> Self {
-        let sf_tables: [AnySFTable<H>; N] =
-            std::array::from_fn(|i| AnySFTable::from_index(tier_configs[i]).unwrap());
-        Self {
-            fp_table: FPTable::<H>::new(),
-            sf_tables,
-            tier_configs,
-            lifecycle_manager: LifecycleManager::new(lifecycle_configs),
-        }
-    }
-
-    /// Function for accurate deduplication
-    pub fn lookup_fingerprint(&self, fingerprint: &H) -> Option<&BlockID<H>> {
-        self.fp_table.lookup(fingerprint)
-    }
-
-    /// Function of searching for base block tier-by-tier
-    pub fn lookup_super_features(
-        &self,
-        super_features: &[SuperFeature],
-    ) -> Option<(BlockID<H>, TierID)> {
-        let mut first_index: usize;
-        let mut last_index: usize = 0;
-
-        for i in 0..self.tier_configs.len() {
-            first_index = last_index;
-            last_index += self.tier_configs[i] as usize;
-            let slice = &super_features[first_index..last_index];
-
-            let table = &self.sf_tables[i];
-            if let Some(block) = table
-                .get_with_upd_metric(slice, self.lifecycle_manager.tier_after_use_upd_fn(i as u8))
-            {
-                return Some((block, i as TierID));
-            }
-        }
-        None
-    }
-
-    /// Add the block: FP + SF for all tiers
-    pub fn add_block(&mut self, fingerprint: H, super_features: &[SuperFeature], version: Version) {
-        let block_id = BlockID::<H>::new(fingerprint.clone(), version);
-        self.fp_table.insert(fingerprint, block_id.clone());
-
-        let mut first_index: usize;
-        let mut last_index: usize = 0;
-
-        for i in 0..self.tier_configs.len() {
-            first_index = last_index;
-            last_index += self.tier_configs[i] as usize;
-            let slice = &super_features[first_index..last_index];
-            let metric = self.lifecycle_manager.default_tier_metric(i as TierID);
-            self.sf_tables[i].insert(&block_id, slice, metric);
-        }
-    }
-
-    /// Finish version: update lifecycle metrics and remove expired entries
-    pub fn finish_version(&self) -> Result<(), IndexError> {
-        for (id, table) in self.sf_tables.iter().enumerate() {
-            let upd_fn = self.lifecycle_manager.tier_between_backups_upd_fn(id as TierID);
-            let filter_fn = self.lifecycle_manager.tier_drop_or_not_fn(id as TierID);
-            table.update_and_clean(upd_fn, filter_fn)?;
-        }
-        Ok(())
-    }
-
-    pub fn fp_table_size(&self) -> usize {
-        self.fp_table.len()
-    }
-
-    pub fn sf_table_size(&self) -> usize {
-        self.sf_tables.iter().map(|table| table.len()).sum()
-    }
-}
-
-impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
-    pub fn default() -> Self {
-        Self::new([3, 4, 6], LifecycleManager::default_configs())
     }
 }

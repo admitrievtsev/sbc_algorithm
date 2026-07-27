@@ -1,24 +1,146 @@
-use std::error::Error;
+use std::collections::HashMap;
 use std::hash::Hash;
+use std::sync::RwLock;
 
-use crate::index::Metric;
+/// A small metadata value associated with a key, used for false-positive filtering.
+pub type Metric = u8;
 
-/// Per-key metric access for sketch indexes.
+/// Storage for per-key metrics.
 ///
-/// Metrics are stored alongside sketches for the same keys.
-pub trait MetricsApi<K>: Send + Sync
+/// Metrics are small values (e.g. false-positive counters) stored independently
+/// from any sketch or posting-list storage.
+pub trait MetricStorage<K>: Send + Sync
 where
     K: Clone + Eq + Hash + Send + Sync,
 {
-    /// The error type returned by metric operations.
-    type Error: Error + Send + Sync + 'static;
+    fn get_metric(&self, key: &K) -> Option<Metric>;
+    fn set_metric(&self, key: &K, value: Metric) -> Option<Metric>;
+    fn remove_metric(&self, key: &K) -> Option<Metric>;
+    fn clear_all(&self);
+}
 
-    /// Returns the metric for the given key, or `None` if the key is absent.
-    fn get_metric(&self, key: &K) -> Result<Option<Metric>, Self::Error>;
+/// In-memory implementation of [`MetricStorage`] backed by a [`RwLock`]-protected [`HashMap`].
+pub struct MetricsMap<K>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+{
+    data: RwLock<HashMap<K, Metric>>,
+}
 
-    /// Sets the metric for the given key.
+impl<K: Clone + Eq + Hash + Send + Sync> MetricsMap<K> {
+    pub fn new() -> Self {
+        Self { data: RwLock::new(HashMap::new()) }
+    }
+
+    /// Applies `update_fn` to every metric, then removes entries where `cleanup_fn` returns `true`.
     ///
-    /// The key must already exist in the index. Returns the previous metric
-    /// value, or `None` if this is the first time the metric is set.
-    fn set_metric(&self, key: &K, value: Metric) -> Result<Option<Metric>, Self::Error>;
+    /// This is a convenience method for garbage-collecting stale entries
+    /// without holding the lock across iterator boundaries.
+    pub fn update_and_clean(
+        &self,
+        update_fn: &mut dyn FnMut(&mut Metric),
+        cleanup_fn: &dyn Fn(Metric) -> bool,
+    ) {
+        let mut data = self.data.write().unwrap();
+
+        for (_, metric) in data.iter_mut() {
+            update_fn(metric);
+        }
+
+        let to_remove: Vec<K> =
+            data.iter().filter(|(_, &m)| cleanup_fn(m)).map(|(k, _)| k.clone()).collect();
+
+        for key in to_remove {
+            data.remove(&key);
+        }
+    }
+}
+
+impl<K: Clone + Eq + Hash + Send + Sync> Default for MetricsMap<K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K> MetricStorage<K> for MetricsMap<K>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+{
+    fn get_metric(&self, key: &K) -> Option<Metric> {
+        let data = self.data.read().unwrap();
+        data.get(key).copied()
+    }
+
+    fn set_metric(&self, key: &K, value: Metric) -> Option<Metric> {
+        let mut data = self.data.write().unwrap();
+        data.insert(key.clone(), value)
+    }
+
+    fn remove_metric(&self, key: &K) -> Option<Metric> {
+        let mut data = self.data.write().unwrap();
+        data.remove(key)
+    }
+
+    fn clear_all(&self) {
+        self.data.write().unwrap().clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_and_get_metric() {
+        let m = MetricsMap::new();
+        assert_eq!(m.set_metric(&42, 5), None);
+        assert_eq!(m.get_metric(&42), Some(5));
+    }
+
+    #[test]
+    fn get_nonexistent_metric() {
+        let m = MetricsMap::new();
+        assert_eq!(m.get_metric(&99), None);
+    }
+
+    #[test]
+    fn set_overwrites_existing() {
+        let m = MetricsMap::new();
+        m.set_metric(&1, 3);
+        assert_eq!(m.set_metric(&1, 7), Some(3));
+        assert_eq!(m.get_metric(&1), Some(7));
+    }
+
+    #[test]
+    fn remove_returns_previous_value() {
+        let m = MetricsMap::new();
+        m.set_metric(&1, 9);
+        assert_eq!(m.remove_metric(&1), Some(9));
+        assert_eq!(m.get_metric(&1), None);
+    }
+
+    #[test]
+    fn clear_all_removes_everything() {
+        let m = MetricsMap::new();
+        m.set_metric(&1, 1);
+        m.set_metric(&2, 2);
+        m.clear_all();
+        assert_eq!(m.get_metric(&1), None);
+        assert_eq!(m.get_metric(&2), None);
+    }
+
+    #[test]
+    fn update_and_clean_removes_entries_matching_cleanup() {
+        let m = MetricsMap::new();
+        m.set_metric(&1, 1);
+        m.set_metric(&2, 5);
+        m.set_metric(&3, 10);
+
+        // Increment all metrics by 1, remove those > 7
+        m.update_and_clean(&mut |m: &mut Metric| *m += 1, &|m: Metric| m > 7);
+
+        assert_eq!(m.get_metric(&1), Some(2));
+        assert_eq!(m.get_metric(&2), Some(6));
+        assert_eq!(m.get_metric(&3), None);
+    }
 }

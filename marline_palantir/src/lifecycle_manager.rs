@@ -1,5 +1,6 @@
+use marline_index::index::metrics::Metric;
+
 use crate::metadata_manager::TierID;
-use marline_index::index::Metric;
 
 type FilterFn = fn(self_metric: Metric) -> bool;
 
