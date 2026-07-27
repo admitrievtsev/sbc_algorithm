@@ -3,77 +3,132 @@ use std::hash::Hash;
 use std::io;
 
 use chunkfs::{ChunkHash, Data, DataContainer, IterableDatabase, Scrub, ScrubMeasurements};
+use num::integer::gcd;
 
 use crate::encoder::PalantirEncoder;
-use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator};
+use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator, TierConfig};
 
 use marline_index::index::store::IndexStorage;
 use marline_index::index::InvertedSketchIndex;
 use marline_index::index::SketchIndexApi;
 use marline_index::sketch::{FixedSketch, U32Sketch};
 
-/// A multi-tier similarity index for super-feature lookup.
-///
-/// `Index` maintains three tiers of [`InvertedSketchIndex`] with increasing
-/// sketch sizes (`U32Sketch<3>`, `U32Sketch<4>`, `U32Sketch<6>`).  Lookups
-/// probe the coarsest tier first and fall through to finer tiers on a miss,
-/// providing a trade-off between search speed and accuracy.
-pub struct Index<H: Clone + Eq + Hash + Send + Sync> {
-    tier1: InvertedSketchIndex<H, U32Sketch<3>, IndexStorage<H, U32Sketch<3>>>,
-    tier2: InvertedSketchIndex<H, U32Sketch<4>, IndexStorage<H, U32Sketch<4>>>,
-    tier3: InvertedSketchIndex<H, U32Sketch<6>, IndexStorage<H, U32Sketch<6>>>,
+
+fn lcm_checked(a: u32, b: u32) -> Option<u32> {
+    let gcd_val = gcd(a, b);
+    (a / gcd_val).checked_mul(b)
 }
 
-impl<H: Clone + Eq + Hash + Send + Sync> Index<H> {
-    /// Creates an empty three-tier similarity index.
-    pub fn new() -> Self {
-        let tier1_storage = IndexStorage::new();
-        let tier1 = InvertedSketchIndex::new(tier1_storage);
-        let tier2_storage = IndexStorage::new();
-        let tier2 = InvertedSketchIndex::new(tier2_storage);
-        let tier3_storage = IndexStorage::new();
-        let tier3 = InvertedSketchIndex::new(tier3_storage);
+fn lcm_vec(nums: &[u32]) -> Option<u32> {
+    let mut res: u32 = 1;
+    for &i in nums {
+        res = lcm_checked(res, i)?;
+    }
+    Some(res)
+}
 
-        Self { tier1, tier2, tier3 }
+/// Internal trait for a single tier of the similarity index.
+trait TierIndex<H> {
+    /// Looks up a stored chunk hash by its sketch values.
+    fn search(&self, values: &[u32]) -> Option<H>;
+    /// Inserts a chunk hash indexed by its sketch values.
+    fn insert(&self, hash: &H, values: &[u32]);
+}
+
+/// A multi-tier similarity index backed by [`InvertedSketchIndex`] tiers.
+///
+/// Each tier corresponds to a group size in [`TierConfig::tier_list`].  The
+/// number of super-features per tier is `lcm(tier_list) / group_size`, which
+/// determines the sketch size for that tier.  Searches probe tiers from
+/// coarsest (index 0) to finest; the first match is returned.
+pub struct Index<H: Clone + Eq + Hash + Send + Sync + 'static> {
+    tiers: Vec<Box<dyn TierIndex<H>>>,
+}
+
+/// A single tier wrapping an [`InvertedSketchIndex`] with a fixed sketch size `N`.
+struct DefinedTier<H: Clone + Eq + Hash + Send + Sync, const N: usize> {
+    tier: InvertedSketchIndex<H, U32Sketch<N>, IndexStorage<H, u32>>,
+}
+
+impl<H: Clone + Eq + Hash + Send + Sync, const N: usize> DefinedTier<H, N> {
+    fn new() -> Self {
+        Self { tier: InvertedSketchIndex::new(IndexStorage::new()) }
+    }
+}
+
+impl<H: Clone + Eq + Hash + Send + Sync, const N: usize> TierIndex<H> for DefinedTier<H, N> {
+    fn search(&self, values: &[u32]) -> Option<H> {
+        let arr: [u32; N] = values.try_into().ok()?;
+        let sketch = FixedSketch::new(arr).ok()?;
+        self.tier.get(&sketch).ok()?
     }
 
-    /// Splits a slice of super-features into three fixed-size sketches by tier.
-    ///
-    /// Returns `None` if any tier does not contain exactly the right number
-    /// of features to fill its sketch.
-    fn split_into_sketches(
-        sfs: &[SuperFeature],
-    ) -> Option<(U32Sketch<3>, U32Sketch<4>, U32Sketch<6>)> {
-        let t1: Vec<u32> = sfs.iter().filter(|sf| sf.tier_id() == 0).map(|sf| sf.value()).collect();
-        let t2: Vec<u32> = sfs.iter().filter(|sf| sf.tier_id() == 1).map(|sf| sf.value()).collect();
-        let t3: Vec<u32> = sfs.iter().filter(|sf| sf.tier_id() == 2).map(|sf| sf.value()).collect();
-
-        Some((
-            FixedSketch::new(t1.try_into().ok()?).ok()?,
-            FixedSketch::new(t2.try_into().ok()?).ok()?,
-            FixedSketch::new(t3.try_into().ok()?).ok()?,
-        ))
+    fn insert(&self, hash: &H, values: &[u32]) {
+        if let Ok(arr) = values.try_into() {
+            if let Ok(sketch) = FixedSketch::new(arr) {
+                let _ = self.tier.put(hash, sketch);
+            }
+        }
     }
+}
 
+impl<H: Clone + Eq + Hash + Send + Sync + 'static> Index<H> {
+    pub fn new(config: &TierConfig) -> Self {
+        let features_num = lcm_vec(&config.tier_list).expect("tier_list LCM overflow") as usize;
+        let mut tiers: Vec<Box<dyn TierIndex<H>>> = Vec::new();
+        for &group_size in &config.tier_list {
+            let num_sfs = features_num / group_size as usize;
+            match num_sfs {
+                2 => tiers.push(Box::new(DefinedTier::<H, 2>::new())),
+                3 => tiers.push(Box::new(DefinedTier::<H, 3>::new())),
+                4 => tiers.push(Box::new(DefinedTier::<H, 4>::new())),
+                5 => tiers.push(Box::new(DefinedTier::<H, 5>::new())),
+                6 => tiers.push(Box::new(DefinedTier::<H, 6>::new())),
+                7 => tiers.push(Box::new(DefinedTier::<H, 7>::new())),
+                8 => tiers.push(Box::new(DefinedTier::<H, 8>::new())),
+                9 => tiers.push(Box::new(DefinedTier::<H, 9>::new())),
+                10 => tiers.push(Box::new(DefinedTier::<H, 10>::new())),
+                11 => tiers.push(Box::new(DefinedTier::<H, 11>::new())),
+                12 => tiers.push(Box::new(DefinedTier::<H, 12>::new())),
+                _ => panic!("unsupported number of super-features per tier: {}", num_sfs),
+            }
+        }
+        Self { tiers }
+    }
+}
+
+impl<H: Clone + Eq + Hash + Send + Sync + 'static> Default for Index<H> {
+    fn default() -> Self {
+        Self::new(&TierConfig::new(vec![4,3,2]))
+    }
+}
+
+impl<H: Clone + Eq + Hash + Send + Sync + 'static> Index<H> {
     /// Searches for a stored chunk hash similar to the given super-features.
     ///
-    /// Probes tier 1 (coarsest) first, then tier 2, then tier 3 (finest).
-    /// Returns the first match found, or `None` if no similar chunk exists.
+    /// Probes each tier in order (coarsest first).  Returns the first match
+    /// found, or `None` if no similar chunk exists in any tier.
     pub fn search(&self, sfs: &[SuperFeature]) -> Option<H> {
-        let (s3, s4, s6) = Self::split_into_sketches(sfs)?;
-        self.tier1
-            .get(&s3)
-            .ok()?
-            .or_else(|| self.tier2.get(&s4).ok()?)
-            .or_else(|| self.tier3.get(&s6).ok()?)
+        for (tier_idx, tier) in self.tiers.iter().enumerate() {
+            let values: Vec<u32> = sfs.iter()
+                .filter(|sf| sf.tier_id() == tier_idx as u8)
+                .map(|sf| sf.value())
+                .collect();
+            if let Some(hash) = tier.search(&values) {
+                return Some(hash);
+            }
+        }
+        None
     }
 
-    /// Inserts a chunk hash indexed by its super-features into all three tiers.
+    /// Inserts a chunk hash indexed by its super-features into all tiers.
     pub fn insert(&self, sfs: &[SuperFeature], hash: H) {
-        if let Some((s3, s4, s6)) = Self::split_into_sketches(sfs) {
-            let _ = self.tier1.put(&hash, s3);
-            let _ = self.tier2.put(&hash, s4);
-            let _ = self.tier3.put(&hash, s6);
+        for (tier_idx, tier) in self.tiers.iter().enumerate() {
+            let values: Vec<u32> = sfs.iter()
+                .filter(|sf| sf.tier_id() == tier_idx as u8)
+                .map(|sf| sf.value())
+                .collect();
+            tier.insert(&hash, &values);
         }
     }
 }
@@ -89,8 +144,7 @@ impl<H: Clone + Eq + Hash + Send + Sync> Index<H> {
 /// that tracks a running average.
 ///
 /// [`SuperFeatureGenerator`]: crate::types::SuperFeatureGenerator
-#[allow(dead_code)]
-pub struct PalantirScrubber<S, H: Clone + Eq + Hash + Send + Sync, E> {
+pub struct PalantirScrubber<S, H: Clone + Eq + Hash + Send + Sync + 'static, E> {
     /// The super-feature generator.
     sf_gen: S,
     /// Multi-tier similarity index.
@@ -105,7 +159,7 @@ pub struct PalantirScrubber<S, H: Clone + Eq + Hash + Send + Sync, E> {
     chunks_processed: u64,
 }
 
-impl<S, H: Clone + Eq + Hash + Send + Sync, E> PalantirScrubber<S, H, E> {
+impl<S, H: Clone + Eq + Hash + Send + Sync + 'static, E> PalantirScrubber<S, H, E> {
     /// Creates a new `PalantirScrubber`.
     ///
     /// # Arguments
@@ -128,7 +182,7 @@ impl<S, H: Clone + Eq + Hash + Send + Sync, E> PalantirScrubber<S, H, E> {
 impl<CDCHash, B, S, E> Scrub<CDCHash, B, CDCHash, HashMap<CDCHash, Vec<u8>>>
     for PalantirScrubber<S, CDCHash, E>
 where
-    CDCHash: ChunkHash + Send + Sync,
+    CDCHash: ChunkHash + Send + Sync + 'static,
     B: IterableDatabase<CDCHash, DataContainer<CDCHash>>,
     S: SuperFeatureGenerator,
     E: PalantirEncoder,
@@ -191,7 +245,7 @@ where
                     container.make_target(vec![hash.clone()]);
                     self.chunks_processed += 1;
                 }
-                Data::TargetChunk(_) => {} // todo: add decoder and get full cycle of chunk scrub
+                Data::TargetChunk(_) => {}
             }
         }
 

@@ -8,7 +8,7 @@ use marline_palantir::sf_generator::PalantirHasher;
 #[test]
 fn test_empty_database() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -24,7 +24,7 @@ fn test_empty_database() {
 #[test]
 fn test_single_chunk_stored_raw() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -50,7 +50,7 @@ fn test_single_chunk_stored_raw() {
 #[test]
 fn test_identical_chunks_delta_encoded() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -92,7 +92,7 @@ fn test_identical_chunks_delta_encoded() {
 #[test]
 fn test_similar_chunks_delta_encoded() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -132,7 +132,7 @@ fn test_similar_chunks_delta_encoded() {
 #[test]
 fn test_dissimilar_chunks_stored_raw() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -163,7 +163,7 @@ fn test_dissimilar_chunks_stored_raw() {
 #[test]
 fn test_mixed_similarity_chunks() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -211,7 +211,7 @@ fn test_mixed_similarity_chunks() {
 #[test]
 fn test_many_chunks_pipeline_throughput() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
@@ -238,7 +238,7 @@ fn test_many_chunks_pipeline_throughput() {
 #[test]
 fn test_target_chunks_are_skipped() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::new();
+    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 

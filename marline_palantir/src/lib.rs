@@ -39,8 +39,8 @@
 //! use marline_palantir::palantir_scrubber::{Index, PalantirScrubber};
 //! use marline_palantir::encoder::GdeltaEncoder;
 //!
-//! let sf_gen = PalantirHasher::new(7, vec![3, 4, 6]);
-//! let index: Index<u64> = Index::new();
+//! let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
+//! let index: Index<u64> = Index::default();
 //! let encoder = GdeltaEncoder;
 //! let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 //! ```
