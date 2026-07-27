@@ -5,7 +5,6 @@ use chunkfs::ChunkHash;
 use marline_index::index::metrics::Metric;
 use marline_index::index::IndexError;
 
-pub type Version = u64;
 pub type TierID = u8;
 
 /// Metadata management for the Palantir deduplication pipeline.
@@ -61,8 +60,12 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
     }
 
     /// Add the block: FP + SF for all tiers
-    pub fn add_block(&mut self, fingerprint: H, super_features: &[SuperFeature], version: Version) {
-        let block_id = BlockID::<H>::new(fingerprint.clone(), version);
+    pub fn add_block(
+        &mut self,
+        fingerprint: H,
+        super_features: &[SuperFeature],
+        block_id: BlockID<H>,
+    ) {
         self.fp_table.insert(fingerprint, block_id.clone());
 
         let mut first_index: usize;

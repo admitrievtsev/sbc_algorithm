@@ -32,17 +32,19 @@ impl SuperFeature {
 
 /// Configuration for multi-tier super-feature grouping.
 ///
-/// `tier_list` specifies the grouping size for each tier.  For example,
-/// `[3, 4, 6]` creates three tiers where groups of 3, 4, and 6 raw
-/// features are each hashed into a single super-feature.
+/// `tier_list` specifies the number of super-features per tier (and the
+/// sketch width for each tier's index).  The values must match the
+/// super-feature counts produced by the hasher.  For example, if the hasher
+/// uses group sizes `[4, 3, 2]` (LCM = 12), it produces 12/4 = 3, 12/3 = 4,
+/// and 12/2 = 6 super-features per tier, so `tier_list` should be `[3, 4, 6]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TierConfig<const N: usize> {
-    /// Group sizes for each tier, ordered from coarsest to finest.
+    /// Number of super-features per tier, ordered from coarsest to finest.
     pub tier_list: [u32; N],
 }
 
 impl<const N: usize> TierConfig<N> {
-    /// Creates a new `TierConfig` with the given tier group sizes.
+    /// Creates a new `TierConfig` with the given super-feature counts per tier.
     pub fn new(tier_list: [u32; N]) -> Self {
         Self { tier_list }
     }

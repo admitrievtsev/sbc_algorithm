@@ -2,15 +2,18 @@ use std::collections::HashMap;
 
 use chunkfs::{Data, DataContainer, Scrub};
 use marline_palantir::encoder::GdeltaEncoder;
-use marline_palantir::palantir_scrubber::{Index, PalantirScrubber};
+use marline_palantir::lifecycle_manager::LifecycleManager;
+use marline_palantir::palantir_scrubber::PalantirScrubber;
 use marline_palantir::sf_generator::PalantirHasher;
+use marline_palantir::types::TierConfig;
 
 #[test]
 fn test_empty_database() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let mut database: HashMap<Vec<u8>, DataContainer<Vec<u8>>> = HashMap::new();
     let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
@@ -24,9 +27,10 @@ fn test_empty_database() {
 #[test]
 fn test_single_chunk_stored_raw() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let data: Vec<u8> =
         b"Hello, World! This is a moderately sized chunk for super-feature generation.".to_vec();
@@ -50,9 +54,10 @@ fn test_single_chunk_stored_raw() {
 #[test]
 fn test_identical_chunks_delta_encoded() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let data: Vec<u8> = b"This chunk appears twice under distinct keys. \
                            The second-chunk processed will find the first via the index \
@@ -92,9 +97,10 @@ fn test_identical_chunks_delta_encoded() {
 #[test]
 fn test_similar_chunks_delta_encoded() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let base: Vec<u8> = b"This is a base chunk for the Palantir similarity pipeline. \
                            It has enough bytes for the gear-hash rolling hash to produce \
@@ -132,9 +138,10 @@ fn test_similar_chunks_delta_encoded() {
 #[test]
 fn test_dissimilar_chunks_stored_raw() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let chunk_a: Vec<u8> = b"AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA".to_vec();
     let chunk_b: Vec<u8> = b"BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB BBBB".to_vec();
@@ -163,9 +170,10 @@ fn test_dissimilar_chunks_stored_raw() {
 #[test]
 fn test_mixed_similarity_chunks() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let group1_base: Vec<u8> = b"Alpha base chunk. The rolling hash requires sufficient data to produce stable \
                                  super-features across multiple tiers for similarity-based deduplication. \
@@ -211,9 +219,10 @@ fn test_mixed_similarity_chunks() {
 #[test]
 fn test_many_chunks_pipeline_throughput() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let base: Vec<u8> = b"Template chunk for generating a family of similar chunks. \
                            Each variant introduces a small edit so the super-features \
@@ -238,9 +247,10 @@ fn test_many_chunks_pipeline_throughput() {
 #[test]
 fn test_target_chunks_are_skipped() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-    let index: Index<Vec<u8>> = Index::default();
     let encoder = GdeltaEncoder;
-    let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+    let tier_config = TierConfig::new([3, 4, 6]);
+    let lifecycle_configs = LifecycleManager::<3>::default_configs();
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 
     let mut database: HashMap<Vec<u8>, DataContainer<Vec<u8>>> = HashMap::new();
 

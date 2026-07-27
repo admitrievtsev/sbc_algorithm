@@ -13,7 +13,7 @@
 //!    chunk with a gear-hash rolling hash and computes a set of minimum-value
 //!    features.  Features are grouped by tier and hashed into super-features.
 //! 2. **Index lookup** — Super-features are split into fixed-size sketches
-//!    and queried against a multi-tier [`palantir_scrubber::Index`].
+//!    and queried against a multi-tier [`metadata_manager::MetadataManager`].
 //! 3. **Delta encoding** — If a similar base chunk is found, the encoder
 //!    ([`encoder::PalantirEncoder`]) produces a delta; otherwise the raw chunk
 //!    is stored.
@@ -28,21 +28,24 @@
 //! | [`types`] | Core data types: [`Chunk`], [`SuperFeature`], [`ChunkDigest`], [`TierConfig`] |
 //! | [`sf_generator`] | Feature generation: [`PalantirHasher`] and the [`SuperFeatureGenerator`] trait |
 //! | [`encoder`] | Delta encoding: [`PalantirEncoder`] trait and [`GdeltaEncoder`] |
-//! | [`palantir_scrubber`] | Scrubbing pipeline: [`PalantirScrubber`] and multi-tier [`Index`] |
+//! | [`palantir_scrubber`] | Scrubbing pipeline: [`PalantirScrubber`] |
 //! | [`error`] | Error types for the crate |
-//! | [`metadata_manager`] | Placeholder for metadata management |
+//! | [`metadata_manager`] | Metadata management: [`MetadataManager`] — fingerprint and super-feature index |
 //!
 //! # Quick start
 //!
 //! ```rust,ignore
 //! use marline_palantir::sf_generator::PalantirHasher;
-//! use marline_palantir::palantir_scrubber::{Index, PalantirScrubber};
+//! use marline_palantir::palantir_scrubber::PalantirScrubber;
 //! use marline_palantir::encoder::GdeltaEncoder;
+//! use marline_palantir::types::TierConfig;
+//! use marline_palantir::lifecycle_manager::LifecycleManager;
 //!
 //! let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
-//! let index: Index<u64> = Index::default();
 //! let encoder = GdeltaEncoder;
-//! let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
+//! let tier_config = TierConfig::new([3, 4, 6]);
+//! let lifecycle_configs = LifecycleManager::default_configs();
+//! let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 //! ```
 //!
 //! [`Chunk`]: types::Chunk
@@ -53,7 +56,7 @@
 //! [`PalantirHasher`]: sf_generator::PalantirHasher
 //! [`PalantirEncoder`]: encoder::PalantirEncoder
 //! [`GdeltaEncoder`]: encoder::GdeltaEncoder
-//! [`Index`]: palantir_scrubber::Index
+//! [`MetadataManager`]: metadata_manager::MetadataManager
 //! [`PalantirScrubber`]: palantir_scrubber::PalantirScrubber
 //!
 pub mod encoder;
