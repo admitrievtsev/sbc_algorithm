@@ -62,6 +62,7 @@ pub mod metadata_manager;
 pub mod palantir_scrubber;
 pub mod sf_generator;
 pub mod types;
+pub mod mock_rocksdb;
 
 // Gear table taken from https://github.com/nlfiedler/fastcdc-rs
 #[rustfmt::skip]

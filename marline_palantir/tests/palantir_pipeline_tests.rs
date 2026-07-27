@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use chunkfs::{Data, DataContainer, Scrub};
+use chunkfs::{Data, DataContainer, Database, Scrub};
 use marline_palantir::encoder::GdeltaEncoder;
+use marline_palantir::mock_rocksdb::MockRocksDBMap;
 use marline_palantir::palantir_scrubber::{Index, PalantirScrubber};
 use marline_palantir::sf_generator::PalantirHasher;
-
 #[test]
 fn test_empty_database() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
@@ -13,7 +13,7 @@ fn test_empty_database() {
     let mut scrubber = PalantirScrubber::new(sf_gen, index, encoder);
 
     let mut database: HashMap<Vec<u8>, DataContainer<Vec<u8>>> = HashMap::new();
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
 
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
@@ -33,13 +33,13 @@ fn test_single_chunk_stored_raw() {
 
     let mut database = HashMap::new();
     database.insert(data.clone(), DataContainer::from(data.clone()));
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
 
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
     assert_eq!(result.processed_data, data.len());
     assert_eq!(target_map.len(), 1);
-    assert_eq!(target_map.get(&data), Some(&data));
+    assert_eq!(target_map.get(&data).unwrap(), data);
 
     match database.get(&data).unwrap().extract() {
         Data::TargetChunk(keys) => assert_eq!(keys.as_slice(), &[data]),
@@ -65,7 +65,7 @@ fn test_identical_chunks_delta_encoded() {
     let mut database = HashMap::new();
     database.insert(key1.clone(), DataContainer::from(data.clone()));
     database.insert(key2.clone(), DataContainer::from(data.clone()));
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
 
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
@@ -75,10 +75,8 @@ fn test_identical_chunks_delta_encoded() {
     assert!(target_map.get(&key1).unwrap().len() <= data.len());
     assert!(target_map.get(&key2).unwrap().len() <= data.len());
 
-    let delta_count = [&key1, &key2]
-        .iter()
-        .filter(|k| target_map.get(k.as_slice()).unwrap().len() < data.len())
-        .count();
+    let delta_count =
+        [&key1, &key2].iter().filter(|k| target_map.get(k).unwrap().len() < data.len()).count();
     assert_eq!(delta_count, 1);
 
     for k in [&key1, &key2] {
@@ -108,17 +106,15 @@ fn test_similar_chunks_delta_encoded() {
     let mut database = HashMap::new();
     database.insert(base.clone(), DataContainer::from(base.clone()));
     database.insert(similar.clone(), DataContainer::from(similar.clone()));
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
 
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
     assert_eq!(result.processed_data, base.len() + similar.len());
     assert_eq!(target_map.len(), 2);
 
-    let delta_count = [&base, &similar]
-        .iter()
-        .filter(|k| target_map.get(k.as_slice()).unwrap().len() < k.len())
-        .count();
+    let delta_count =
+        [&base, &similar].iter().filter(|k| target_map.get(k).unwrap().len() < k.len()).count();
     assert_eq!(delta_count, 1);
 
     for k in [&base, &similar] {
@@ -142,15 +138,15 @@ fn test_dissimilar_chunks_stored_raw() {
     let mut database = HashMap::new();
     database.insert(chunk_a.clone(), DataContainer::from(chunk_a.clone()));
     database.insert(chunk_b.clone(), DataContainer::from(chunk_b.clone()));
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
 
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
     assert_eq!(result.processed_data, chunk_a.len() + chunk_b.len());
     assert_eq!(target_map.len(), 2);
 
-    assert_eq!(target_map.get(&chunk_a), Some(&chunk_a));
-    assert_eq!(target_map.get(&chunk_b), Some(&chunk_b));
+    assert_eq!(target_map.get(&chunk_a).unwrap(), chunk_a);
+    assert_eq!(target_map.get(&chunk_b).unwrap(), chunk_b);
 
     for k in [&chunk_a, &chunk_b] {
         match database.get(k).unwrap().extract() {
@@ -184,7 +180,7 @@ fn test_mixed_similarity_chunks() {
     database.insert(group1_base.clone(), DataContainer::from(group1_base.clone()));
     database.insert(group1_similar.clone(), DataContainer::from(group1_similar.clone()));
     database.insert(unique.clone(), DataContainer::from(unique.clone()));
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
 
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
@@ -194,11 +190,11 @@ fn test_mixed_similarity_chunks() {
 
     let delta_count = [&group1_base, &group1_similar]
         .iter()
-        .filter(|k| target_map.get(k.as_slice()).unwrap().len() < k.len())
+        .filter(|k| target_map.get(k).unwrap().len() < k.len())
         .count();
     assert_eq!(delta_count, 1);
 
-    assert_eq!(target_map.get(&unique), Some(&unique));
+    assert_eq!(target_map.get(&unique).unwrap(), unique);
 
     for k in [&group1_base, &group1_similar, &unique] {
         match database.get(k).unwrap().extract() {
@@ -228,7 +224,7 @@ fn test_many_chunks_pipeline_throughput() {
         database.insert(key, DataContainer::from(data));
     }
 
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
     assert!(result.processed_data > 0);
@@ -248,7 +244,7 @@ fn test_target_chunks_are_skipped() {
     dc.make_target(vec![b"t-key".to_vec()]);
     database.insert(b"skipped".to_vec(), dc);
 
-    let mut target_map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let mut target_map: MockRocksDBMap = MockRocksDBMap::new();
     let result = scrubber.scrub(&mut database, &mut target_map).unwrap();
 
     assert_eq!(result.processed_data, 0);

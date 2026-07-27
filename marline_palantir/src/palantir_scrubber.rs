@@ -1,11 +1,13 @@
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::io;
 
-use chunkfs::{ChunkHash, Data, DataContainer, IterableDatabase, Scrub, ScrubMeasurements};
+use chunkfs::{
+    ChunkHash, Data, DataContainer, Database, IterableDatabase, Scrub, ScrubMeasurements,
+};
 use num::integer::gcd;
 
 use crate::encoder::PalantirEncoder;
+use crate::mock_rocksdb::MockRocksDBMap;
 use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator, TierConfig};
 
 use marline_index::index::store::IndexStorage;
@@ -180,7 +182,7 @@ impl<S, H: Clone + Eq + Hash + Send + Sync + 'static, E> PalantirScrubber<S, H, 
     }
 }
 
-impl<CDCHash, B, S, E> Scrub<CDCHash, B, CDCHash, HashMap<CDCHash, Vec<u8>>>
+impl<CDCHash, B, S, E> Scrub<CDCHash, B, CDCHash, MockRocksDBMap>
     for PalantirScrubber<S, CDCHash, E>
 where
     CDCHash: ChunkHash + Send + Sync + 'static,
@@ -201,7 +203,7 @@ where
     fn scrub<'a>(
         &mut self,
         database: &mut B,
-        target_map: &mut HashMap<CDCHash, Vec<u8>>,
+        target_map: &mut MockRocksDBMap,
     ) -> io::Result<ScrubMeasurements>
     where
         CDCHash: 'a,
