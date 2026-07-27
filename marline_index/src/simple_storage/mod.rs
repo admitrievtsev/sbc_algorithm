@@ -1,3 +1,7 @@
+//! This mod implements KV storage based on simple hashmap
+//! basicaly it's hashmap and search is linear
+//! this mod should be used for exemple and compare between inverted index and this impl
+
 use std::{hash::Hash, sync::RwLock};
 
 use crate::index::IndexError;
