@@ -132,7 +132,7 @@ impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
         }
     }
 
-    pub fn insert(&mut self, block_id: &BlockID<H>, features: &[SuperFeature], metric: Metric) {
+    pub fn insert(&self, block_id: &BlockID<H>, features: &[SuperFeature], metric: Metric) {
         match self {
             Self::T2(t) => t.insert(block_id, features, metric),
             Self::T3(t) => t.insert(block_id, features, metric),
