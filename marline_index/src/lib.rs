@@ -33,3 +33,4 @@
 
 pub mod index;
 pub mod sketch;
+pub mod simple_storage;
