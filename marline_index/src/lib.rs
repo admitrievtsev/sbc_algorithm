@@ -11,6 +11,8 @@
 //!   implementation for representing fixed-size feature sets.
 //! - [`index`]: Contains the [`SketchIndexApi`] trait and the
 //!   [`InvertedSketchIndex`] implementation.
+//! - [`heuristic_index`]: Contains the [`HeuristicInvertedSketchIndex`] with
+//!   heuristic search support.
 //!
 //! # Quick Start
 //!
@@ -30,7 +32,9 @@
 //! [`FixedSketch<F, N>`]: sketch::FixedSketch
 //! [`SketchIndexApi`]: index::SketchIndexApi
 //! [`InvertedSketchIndex`]: index::InvertedSketchIndex
+//! [`HeuristicInvertedSketchIndex`]: heuristic_index::HeuristicInvertedSketchIndex
 
+pub mod heuristic_index;
 pub mod index;
-pub mod sketch;
 pub mod simple_storage;
+pub mod sketch;
