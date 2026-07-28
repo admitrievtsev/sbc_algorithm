@@ -3,6 +3,7 @@
 //! This module provides a posting-list-backed inverted index for nearest-neighbor
 //! search over arbitrary sketch implementations.
 
+use std::error::Error;
 use std::hash::Hash;
 
 use crate::sketch::Sketch;
@@ -12,8 +13,8 @@ pub use inverted::InvertedSketchIndex;
 
 mod error;
 mod inverted;
-pub mod store;
 pub mod metrics;
+pub mod store;
 
 /// A sketch-based similarity search index.
 ///
@@ -26,7 +27,7 @@ where
     K: Clone + Eq + Hash + Send + Sync,
 {
     /// The error type returned by index operations.
-    type Error;
+    type Error: Error + Send + Sync + 'static;
 
     /// Search: finds the closest matching key for a query sketch.
     fn get(&self, query: &S) -> Result<Option<K>, Self::Error>;

@@ -1,7 +1,3 @@
-//! This mod implements KV storage based on simple hashmap
-//! basicaly it's hashmap and search is linear
-//! this mod should be used for exemple and compare between inverted index and this impl
-
 use std::{hash::Hash, sync::RwLock};
 
 use crate::index::IndexError;
@@ -18,6 +14,12 @@ impl<K, S: Sketch> LinearSearchIndex<K, S> {
     }
 }
 
+impl<K, S: Sketch> Default for LinearSearchIndex<K, S> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, S: Sketch> SketchIndexApi<K, S> for LinearSearchIndex<K, S>
 where
     K: Clone + Eq + Hash + Send + Sync,
@@ -26,12 +28,19 @@ where
     type Error = IndexError;
 
     fn put(&self, key: &K, sketch: S) -> Result<(), Self::Error> {
-        self.entries.write().unwrap().push((key.clone(), sketch));
+        let mut entries = self.entries.write().expect("rwlock poisoned");
+        if let Some((_, existing_sketch)) =
+            entries.iter_mut().find(|(entry_key, _)| entry_key == key)
+        {
+            *existing_sketch = sketch;
+        } else {
+            entries.push((key.clone(), sketch));
+        }
         Ok(())
     }
 
     fn top_k(&self, query: &S, k: usize) -> Result<Vec<(K, f64)>, Self::Error> {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().expect("rwlock poisoned");
         let mut scored: Vec<(K, f64)> = entries
             .iter()
             .map(|(key, sketch)| {
@@ -50,12 +59,44 @@ where
     }
 
     fn remove(&self, key: &K) -> Result<(), Self::Error> {
-        self.entries.write().unwrap().retain(|(k, _)| k != key);
+        self.entries.write().expect("rwlock poisoned").retain(|(k, _)| k != key);
         Ok(())
     }
 
     fn clear(&self) -> Result<(), Self::Error> {
-        self.entries.write().unwrap().clear();
+        self.entries.write().expect("rwlock poisoned").clear();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sketch::U32Sketch;
+
+    fn mk(vals: [u32; 3]) -> U32Sketch<3> {
+        U32Sketch::new(vals)
+    }
+
+    #[test]
+    fn put_overwrites_existing_key() {
+        let index = LinearSearchIndex::new();
+        index.put(&1, mk([1, 2, 3])).unwrap();
+        index.put(&1, mk([10, 11, 12])).unwrap();
+
+        let results = index.top_k(&mk([10, 11, 12]), 10).unwrap();
+        assert_eq!(results, vec![(1, 1.0)]);
+
+        let old_query_results = index.top_k(&mk([1, 2, 3]), 10).unwrap();
+        assert_eq!(old_query_results, vec![(1, 0.0)]);
+    }
+
+    #[test]
+    fn remove_deletes_all_entries_for_key() {
+        let index = LinearSearchIndex::new();
+        index.put(&1, mk([1, 2, 3])).unwrap();
+        index.remove(&1).unwrap();
+
+        assert!(index.top_k(&mk([1, 2, 3]), 10).unwrap().is_empty());
     }
 }

@@ -14,7 +14,7 @@
 //!
 //! # Quick Start
 //!
-//! ```rust,ignore
+//! ```rust
 //! use marline_index::index::store::IndexStorage;
 //! use marline_index::index::{InvertedSketchIndex, SketchIndexApi};
 //! use marline_index::sketch::U32Sketch;
@@ -22,7 +22,7 @@
 //! let storage = IndexStorage::new();
 //! let idx = InvertedSketchIndex::new(storage);
 //!
-//! let sk = U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]).unwrap();
+//! let sk = U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]);
 //! idx.put(&42_u64, sk).unwrap();
 //! ```
 //!
@@ -32,5 +32,5 @@
 //! [`InvertedSketchIndex`]: index::InvertedSketchIndex
 
 pub mod index;
-pub mod sketch;
 pub mod simple_storage;
+pub mod sketch;

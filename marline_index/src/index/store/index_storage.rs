@@ -55,6 +55,15 @@ where
         Ok(())
     }
 
+    fn remove_key(&self, key: &K) -> Result<(), IndexError> {
+        let mut postings = self.postings_write();
+        postings.retain(|_, keys| {
+            keys.remove(key);
+            !keys.is_empty()
+        });
+        Ok(())
+    }
+
     fn len_postings(&self) -> Result<usize, IndexError> {
         Ok(self.postings_read().len())
     }
@@ -74,20 +83,16 @@ mod tests {
     #[test]
     fn insert_posting_is_idempotent() {
         let store = Mock::new();
-
         store.insert_posting(100, 42).unwrap();
         store.insert_posting(100, 42).unwrap();
-
         assert_eq!(store.posting_list(100).unwrap(), vec![42]);
     }
 
     #[test]
     fn posting_lists_are_independent_by_feature() {
         let store = Mock::new();
-
         store.insert_posting(100, 1).unwrap();
         store.insert_posting(200, 2).unwrap();
-
         assert_eq!(store.posting_list(100).unwrap(), vec![1]);
         assert_eq!(store.posting_list(200).unwrap(), vec![2]);
     }
@@ -95,21 +100,28 @@ mod tests {
     #[test]
     fn remove_posting_removes_empty_feature_bucket() {
         let store = Mock::new();
-
         store.insert_posting(100, 1).unwrap();
         store.remove_posting(100, &1).unwrap();
-
         assert!(store.posting_list(100).unwrap().is_empty());
         assert_eq!(store.len_postings().unwrap(), 0);
     }
 
     #[test]
+    fn remove_key_scans_all_postings() {
+        let store = Mock::new();
+        store.insert_posting(10, 1).unwrap();
+        store.insert_posting(20, 1).unwrap();
+        store.insert_posting(20, 2).unwrap();
+        store.remove_key(&1).unwrap();
+        assert!(store.posting_list(10).unwrap().is_empty());
+        assert_eq!(store.posting_list(20).unwrap(), vec![2]);
+    }
+
+    #[test]
     fn clear_removes_all_postings() {
         let store = Mock::new();
-
         store.insert_posting(1, 1).unwrap();
         store.clear_postings().unwrap();
-
         assert_eq!(store.len_postings().unwrap(), 0);
     }
 
@@ -118,7 +130,6 @@ mod tests {
         use std::thread;
 
         let store = Mock::new();
-
         store.insert_posting(100, 1).unwrap();
 
         let store = std::sync::Arc::new(store);
