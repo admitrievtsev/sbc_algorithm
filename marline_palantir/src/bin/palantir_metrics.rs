@@ -20,13 +20,17 @@ struct Config {
 
 fn configs() -> Vec<Config> {
     vec![
-        Config { name: "N1_G2",            tier_list: vec![2],      features_num_override: None },
-        Config { name: "N1_odess_like",    tier_list: vec![2],      features_num_override: Some(12) },
-        Config { name: "N2_G3-2",          tier_list: vec![3, 2],   features_num_override: None },
-        Config { name: "N3_G4-3-2",        tier_list: vec![4, 3, 2], features_num_override: None },
-        Config { name: "N3_G8-4-2",        tier_list: vec![8, 4, 2], features_num_override: None },
-        Config { name: "N4_G6-4-3-2",      tier_list: vec![6, 4, 3, 2], features_num_override: None },
-        Config { name: "N5_G12-6-4-3-2",   tier_list: vec![12, 6, 4, 3, 2], features_num_override: None },
+        Config { name: "N1_G2", tier_list: vec![2], features_num_override: None },
+        Config { name: "N1_odess_like", tier_list: vec![2], features_num_override: Some(12) },
+        Config { name: "N2_G3-2", tier_list: vec![3, 2], features_num_override: None },
+        Config { name: "N3_G4-3-2", tier_list: vec![4, 3, 2], features_num_override: None },
+        Config { name: "N3_G8-4-2", tier_list: vec![8, 4, 2], features_num_override: None },
+        Config { name: "N4_G6-4-3-2", tier_list: vec![6, 4, 3, 2], features_num_override: None },
+        Config {
+            name: "N5_G12-6-4-3-2",
+            tier_list: vec![12, 6, 4, 3, 2],
+            features_num_override: None,
+        },
     ]
 }
 
@@ -74,13 +78,17 @@ fn run_metrics(
                 PalantirHasher::new(7, tier_list.to_vec())
             };
             let mut scrubber = PalantirScrubber::new(
-                sf_gen, GdeltaEncoder, tc,
+                sf_gen,
+                GdeltaEncoder,
+                tc,
                 LifecycleManager::<1>::default_configs(),
             );
             for kb in kernels {
                 let mut chunker = FastChunker::new(chunk_size);
                 let chunks = chunker.chunk_data(&kb.data, Vec::new());
-                if chunks.is_empty() { continue; }
+                if chunks.is_empty() {
+                    continue;
+                }
                 let mut db: HashMap<Vec<u8>, DataContainer<Vec<u8>>> =
                     HashMap::with_capacity(chunks.len());
                 for c in &chunks {
@@ -98,13 +106,17 @@ fn run_metrics(
             let tc = TierConfig::new(arr);
             let sf_gen = PalantirHasher::new(7, tier_list.to_vec());
             let mut scrubber = PalantirScrubber::new(
-                sf_gen, GdeltaEncoder, tc,
+                sf_gen,
+                GdeltaEncoder,
+                tc,
                 LifecycleManager::<2>::default_configs(),
             );
             for kb in kernels {
                 let mut chunker = FastChunker::new(chunk_size);
                 let chunks = chunker.chunk_data(&kb.data, Vec::new());
-                if chunks.is_empty() { continue; }
+                if chunks.is_empty() {
+                    continue;
+                }
                 let mut db: HashMap<Vec<u8>, DataContainer<Vec<u8>>> =
                     HashMap::with_capacity(chunks.len());
                 for c in &chunks {
@@ -122,13 +134,17 @@ fn run_metrics(
             let tc = TierConfig::new(arr);
             let sf_gen = PalantirHasher::new(7, tier_list.to_vec());
             let mut scrubber = PalantirScrubber::new(
-                sf_gen, GdeltaEncoder, tc,
+                sf_gen,
+                GdeltaEncoder,
+                tc,
                 LifecycleManager::<3>::default_configs(),
             );
             for kb in kernels {
                 let mut chunker = FastChunker::new(chunk_size);
                 let chunks = chunker.chunk_data(&kb.data, Vec::new());
-                if chunks.is_empty() { continue; }
+                if chunks.is_empty() {
+                    continue;
+                }
                 let mut db: HashMap<Vec<u8>, DataContainer<Vec<u8>>> =
                     HashMap::with_capacity(chunks.len());
                 for c in &chunks {
@@ -146,13 +162,17 @@ fn run_metrics(
             let tc = TierConfig::new(arr);
             let sf_gen = PalantirHasher::new(7, tier_list.to_vec());
             let mut scrubber = PalantirScrubber::new(
-                sf_gen, GdeltaEncoder, tc,
+                sf_gen,
+                GdeltaEncoder,
+                tc,
                 LifecycleManager::<4>::default_configs(),
             );
             for kb in kernels {
                 let mut chunker = FastChunker::new(chunk_size);
                 let chunks = chunker.chunk_data(&kb.data, Vec::new());
-                if chunks.is_empty() { continue; }
+                if chunks.is_empty() {
+                    continue;
+                }
                 let mut db: HashMap<Vec<u8>, DataContainer<Vec<u8>>> =
                     HashMap::with_capacity(chunks.len());
                 for c in &chunks {
@@ -170,13 +190,17 @@ fn run_metrics(
             let tc = TierConfig::new(arr);
             let sf_gen = PalantirHasher::new(7, tier_list.to_vec());
             let mut scrubber = PalantirScrubber::new(
-                sf_gen, GdeltaEncoder, tc,
+                sf_gen,
+                GdeltaEncoder,
+                tc,
                 LifecycleManager::<5>::default_configs(),
             );
             for kb in kernels {
                 let mut chunker = FastChunker::new(chunk_size);
                 let chunks = chunker.chunk_data(&kb.data, Vec::new());
-                if chunks.is_empty() { continue; }
+                if chunks.is_empty() {
+                    continue;
+                }
                 let mut db: HashMap<Vec<u8>, DataContainer<Vec<u8>>> =
                     HashMap::with_capacity(chunks.len());
                 for c in &chunks {
@@ -195,11 +219,8 @@ fn run_metrics(
     let elapsed = start.elapsed();
     let stored_total = target.total_bytes() as u64;
     let chunks_total = target.len();
-    let dedup_ratio = if original_total > 0 {
-        stored_total as f64 / original_total as f64
-    } else {
-        1.0
-    };
+    let dedup_ratio =
+        if original_total > 0 { stored_total as f64 / original_total as f64 } else { 1.0 };
     let throughput_mbps = if elapsed.as_secs_f64() > 0.0 {
         (original_total as f64 / elapsed.as_secs_f64()) / (1024.0 * 1024.0)
     } else {
@@ -240,8 +261,16 @@ fn main() {
 
     println!(
         "{:<20} {:<8} {:<13} {:<11} {:<11} {:<9} {:<9} {:<9} {:<12} {:<12}",
-        "config", "chunks", "dedup_ratio", "stored_mb", "orig_mb",
-        "delta_cnt", "fp_size", "sf_size", "elapsed_s", "mbps"
+        "config",
+        "chunks",
+        "dedup_ratio",
+        "stored_mb",
+        "orig_mb",
+        "delta_cnt",
+        "fp_size",
+        "sf_size",
+        "elapsed_s",
+        "mbps"
     );
 
     for cfg in configs() {
