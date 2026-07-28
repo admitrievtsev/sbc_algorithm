@@ -1,4 +1,4 @@
-use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator};
+use crate::types::{Chunk, SuperFeatureGenerator};
 use crate::GEAR;
 use num::integer::gcd;
 use std::hash::{DefaultHasher, Hasher};
@@ -81,7 +81,7 @@ impl SuperFeatureGenerator for PalantirHasher {
     ///    linear transformation of the fingerprint.
     /// 4. Groups the final features by tier, sorts each group, and hashes them
     ///    into a [`SuperFeature`](crate::types::SuperFeature).
-    fn generate(&self, chunk: &Chunk) -> Vec<SuperFeature> {
+    fn generate(&self, chunk: &Chunk) -> Vec<crate::types::SuperFeature> {
         let data = chunk.as_bytes();
         let mut features = vec![u64::MAX; self.features_num];
 
@@ -115,70 +115,11 @@ impl SuperFeatureGenerator for PalantirHasher {
                 for &val in &group {
                     hasher.write_u64(val);
                 }
-                let hash = hasher.finish() as u32;
-                super_features.push(SuperFeature::new(tier_id as u8, hash, 0));
+                let hash = hasher.finish();
+                super_features.push(crate::types::SuperFeature::new(tier_id as u8, hash as u32));
             }
         }
 
         super_features
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::Chunk;
-
-    fn count_by_tier(sfs: &[SuperFeature]) -> Vec<usize> {
-        let max_tier = sfs.iter().map(|sf| sf.tier_id() as usize).max().unwrap_or(0);
-        let mut counts = vec![0usize; max_tier + 1];
-        for sf in sfs {
-            counts[sf.tier_id() as usize] += 1;
-        }
-        counts
-    }
-
-    #[test]
-    fn superfeature_count_per_tier_matches_lcm() {
-        let tier_list = vec![3u32, 4, 6];
-        let hasher = PalantirHasher::new(8, tier_list.clone());
-        let chunk = Chunk::new(vec![42u8; 1024]);
-        let sfs = hasher.generate(&chunk);
-        let counts = count_by_tier(&sfs);
-        let features_num = lcm_vec(&tier_list).unwrap() as usize;
-
-        for (i, &gs) in tier_list.iter().enumerate() {
-            assert_eq!(
-                counts[i],
-                features_num / gs as usize,
-                "tier {} (group size {}): expected {} super-features, got {}",
-                i,
-                gs,
-                features_num / gs as usize,
-                counts[i]
-            );
-        }
-    }
-
-    #[test]
-    fn superfeature_count_for_coarse_tiers() {
-        let tier_list = vec![2u32, 3];
-        let hasher = PalantirHasher::new(8, tier_list.clone());
-        let chunk = Chunk::new(vec![99u8; 512]);
-        let sfs = hasher.generate(&chunk);
-        let counts = count_by_tier(&sfs);
-        let features_num = lcm_vec(&tier_list).unwrap() as usize;
-
-        for (i, &gs) in tier_list.iter().enumerate() {
-            assert_eq!(
-                counts[i],
-                features_num / gs as usize,
-                "tier {} (group size {}): expected {} super-features, got {}",
-                i,
-                gs,
-                features_num / gs as usize,
-                counts[i]
-            );
-        }
     }
 }

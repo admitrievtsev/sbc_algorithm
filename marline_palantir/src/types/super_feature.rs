@@ -12,14 +12,11 @@ pub struct SuperFeature {
     tier_id: u8,
     /// The hashed super-feature value.
     value: u32,
-    /// Version identifier for the algorithm that produced this feature.
-    version_id: u32,
 }
 
 impl SuperFeature {
-    /// Creates a new `SuperFeature`.
-    pub fn new(tier_id: u8, value: u32, version_id: u32) -> Self {
-        Self { tier_id, value, version_id }
+    pub fn new(tier_id: u8, value: u32) -> Self {
+        Self { tier_id, value }
     }
 
     /// Returns the tier index of this super-feature.
@@ -31,27 +28,24 @@ impl SuperFeature {
     pub fn value(&self) -> u32 {
         self.value
     }
-
-    /// Returns the algorithm version that produced this feature.
-    pub fn version_id(&self) -> u32 {
-        self.version_id
-    }
 }
 
 /// Configuration for multi-tier super-feature grouping.
 ///
-/// `tier_list` specifies the grouping size for each tier.  For example,
-/// `vec![3, 4, 6]` creates three tiers where groups of 3, 4, and 6 raw
-/// features are each hashed into a single super-feature.
+/// `tier_list` specifies the number of super-features per tier (and the
+/// sketch width for each tier's index).  The values must match the
+/// super-feature counts produced by the hasher.  For example, if the hasher
+/// uses group sizes `[4, 3, 2]` (LCM = 12), it produces 12/4 = 3, 12/3 = 4,
+/// and 12/2 = 6 super-features per tier, so `tier_list` should be `[3, 4, 6]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TierConfig {
-    /// Group sizes for each tier, ordered from coarsest to finest.
-    pub tier_list: Vec<u32>,
+pub struct TierConfig<const N: usize> {
+    /// Number of super-features per tier, ordered from coarsest to finest.
+    pub tier_list: [u32; N],
 }
 
-impl TierConfig {
-    /// Creates a new `TierConfig` with the given tier group sizes.
-    pub fn new(tier_list: Vec<u32>) -> Self {
+impl<const N: usize> TierConfig<N> {
+    /// Creates a new `TierConfig` with the given super-feature counts per tier.
+    pub fn new(tier_list: [u32; N]) -> Self {
         Self { tier_list }
     }
 }

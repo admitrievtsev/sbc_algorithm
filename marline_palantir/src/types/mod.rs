@@ -9,10 +9,11 @@
 //! * [`TierConfig`] — configuration for multi-tier feature grouping.
 //! * [`SuperFeatureGenerator`] — trait for producing super-features from a chunk.
 
+mod block_id;
 mod chunk;
 mod chunk_hash;
 mod super_feature;
-
+pub use block_id::BlockID;
 pub use chunk::Chunk;
 pub use chunk_hash::ChunkDigest;
 pub use super_feature::{SuperFeature, SuperFeatureGenerator, TierConfig};
