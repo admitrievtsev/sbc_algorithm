@@ -221,7 +221,7 @@ fn bench_throughput(c: &mut Criterion) {
 
     // === Inverted index benchmark ===
     let mut group = c.benchmark_group("inverted_throughput");
-    group.sample_size(100);
+    group.sample_size(10);
     group.throughput(Throughput::Bytes(total_query_bytes));
     group.bench_function("kernels_6sf", |b| {
         b.iter(|| {
