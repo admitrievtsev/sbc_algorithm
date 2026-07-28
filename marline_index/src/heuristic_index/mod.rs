@@ -302,7 +302,7 @@ mod tests {
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.put(&1, mk([10, 11, 12, 13, 14, 15])).unwrap();
 
-        assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), Some(1));
+        assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), None);
         assert_eq!(index.get(&mk([10, 11, 12, 13, 14, 15])).unwrap(), Some(1));
     }
 
@@ -328,6 +328,7 @@ mod tests {
 
         index.remove(&1).unwrap();
         assert_eq!(index.get_metric(&1), None);
+        assert!(index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap().is_empty());
     }
 
     #[test]

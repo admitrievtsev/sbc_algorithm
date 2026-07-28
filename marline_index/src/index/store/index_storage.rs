@@ -55,6 +55,15 @@ where
         Ok(())
     }
 
+    fn remove_key(&self, key: &K) -> Result<(), IndexError> {
+        let mut postings = self.postings_write();
+        postings.retain(|_, keys| {
+            keys.remove(key);
+            !keys.is_empty()
+        });
+        Ok(())
+    }
+
     fn len_postings(&self) -> Result<usize, IndexError> {
         Ok(self.postings_read().len())
     }
@@ -101,6 +110,19 @@ mod tests {
 
         assert!(store.posting_list(100).unwrap().is_empty());
         assert_eq!(store.len_postings().unwrap(), 0);
+    }
+
+    #[test]
+    fn remove_key_scans_all_postings() {
+        let store = Mock::new();
+        store.insert_posting(10, 1).unwrap();
+        store.insert_posting(20, 1).unwrap();
+        store.insert_posting(20, 2).unwrap();
+
+        store.remove_key(&1).unwrap();
+
+        assert!(store.posting_list(10).unwrap().is_empty());
+        assert_eq!(store.posting_list(20).unwrap(), vec![2]);
     }
 
     #[test]

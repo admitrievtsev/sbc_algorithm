@@ -187,10 +187,7 @@ mod tests {
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.put(&1, mk([10, 11, 12, 13, 14, 15])).unwrap();
 
-        // Old postings are NOT cleaned (no sketches to remove from).
-        // Key 1 still appears for features [1,2,3,4,5,6] AND [10,11,12,13,14,15].
-        // Both queries should find key 1.
-        assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), Some(1));
+        assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), None);
         assert_eq!(index.get(&mk([10, 11, 12, 13, 14, 15])).unwrap(), Some(1));
     }
 
@@ -208,14 +205,12 @@ mod tests {
     }
 
     #[test]
-    fn remove_is_noop() {
+    fn remove_deletes_entry() {
         let index = idx();
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.remove(&1).unwrap();
-        // Key 1 still appears (postings are not cleaned).
         let results = index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, 1);
+        assert!(results.is_empty());
     }
 
     #[test]
