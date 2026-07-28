@@ -1,12 +1,14 @@
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::io;
 
-use chunkfs::{ChunkHash, Data, DataContainer, IterableDatabase, Scrub, ScrubMeasurements};
+use chunkfs::{
+    ChunkHash, Data, DataContainer, Database, IterableDatabase, Scrub, ScrubMeasurements,
+};
 
 use crate::encoder::PalantirEncoder;
 use crate::lifecycle_manager::LifecycleTierConfig;
 use crate::metadata_manager::MetadataManager;
+use crate::mock_rocksdb::MockRocksDBMap;
 use crate::types::{BlockID, Chunk, SuperFeatureGenerator, TierConfig};
 
 /// Core scrubbing pipeline that applies the Palantir method to a storage backend.
@@ -38,6 +40,8 @@ pub struct PalantirScrubber<
     avg_comp_ratio: f64,
     /// Total chunks processed.
     chunks_processed: u64,
+    /// Count of chunks stored as deltas.
+    delta_stored: u64,
 }
 
 impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: usize>
@@ -71,35 +75,37 @@ impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: us
             fp_threshold: 0.9,
             avg_comp_ratio: 1.0,
             chunks_processed: 0,
+            delta_stored: 0,
         }
+    }
+
+    pub fn delta_stored(&self) -> u64 {
+        self.delta_stored
+    }
+
+    pub fn fp_table_size(&self) -> usize {
+        self.metadata_manager.fp_table_size()
+    }
+
+    pub fn sf_table_size(&self) -> usize {
+        self.metadata_manager.sf_table_size()
     }
 }
 
-impl<CDCHash, B, S, E, const N: usize> Scrub<CDCHash, B, CDCHash, HashMap<CDCHash, Vec<u8>>>
-    for PalantirScrubber<S, CDCHash, E, N>
+impl<B, S, E, const N: usize> Scrub<Vec<u8>, B, Vec<u8>, MockRocksDBMap>
+    for PalantirScrubber<S, Vec<u8>, E, N>
 where
-    CDCHash: ChunkHash + Send + Sync + 'static,
-    B: IterableDatabase<CDCHash, DataContainer<CDCHash>>,
+    B: IterableDatabase<Vec<u8>, DataContainer<Vec<u8>>>,
     S: SuperFeatureGenerator,
     E: PalantirEncoder,
 {
-    /// Runs the Palantir scrub over all chunks in `database`.
-    ///
-    /// Every chunk is processed through the feature-generation → lookup → delta-or-store
-    /// pipeline.  Delta decisions are based on an adaptive compression-ratio heuristic:
-    /// a delta is stored only when `ratio < fp_threshold × avg_comp_ratio`, where
-    /// `avg_comp_ratio` is an EMA that tracks recent compression efficiency.
-    ///
-    /// # Note
-    ///
-    /// `Data::TargetChunk` entries are silently skipped (decoder integration is pending).
     fn scrub<'a>(
         &mut self,
         database: &mut B,
-        target_map: &mut HashMap<CDCHash, Vec<u8>>,
+        target_map: &mut MockRocksDBMap,
     ) -> io::Result<ScrubMeasurements>
     where
-        CDCHash: 'a,
+        Vec<u8>: 'a,
     {
         let start = std::time::Instant::now();
         let mut processed_data = 0;
@@ -111,33 +117,38 @@ where
                     let chunk = Chunk::new(chunk_data.clone());
                     let super_features = self.sf_gen.generate(&chunk);
                     match self.metadata_manager.lookup_fingerprint(hash) {
-                        Some(_) => {},
+                        Some(_) => {}
                         None => {
                             match self.metadata_manager.lookup_super_features(&super_features) {
                                 Some((base_hash, _)) => {
-                                    if let Some(base_data) = target_map.get(&base_hash.hash) {
-                                        let delta = self.encoder.encode(chunk_data, base_data);
-                                        let delta_compressed =
-                                            zstd::encode_all(delta.as_slice(), 0)?;
-                                        let simple_compressed =
-                                            zstd::encode_all(chunk_data.as_slice(), 0)?;
-                                        let ratio = delta_compressed.len() as f64
-                                            / simple_compressed.len() as f64;
+                                    match target_map.get(&base_hash.hash) {
+                                        Ok(base_data) => {
+                                            let delta = self.encoder.encode(chunk_data, &base_data);
+                                            let delta_compressed =
+                                                zstd::encode_all(delta.as_slice(), 0)?;
+                                            let simple_compressed =
+                                                zstd::encode_all(chunk_data.as_slice(), 0)?;
+                                            let ratio = delta_compressed.len() as f64
+                                                / simple_compressed.len() as f64;
 
-                                        if ratio < self.fp_threshold * self.avg_comp_ratio {
-                                            target_map.insert(hash.clone(), delta);
-                                            self.avg_comp_ratio =
-                                                self.avg_comp_ratio * 0.95 + ratio * 0.05;
-                                        } else {
-                                            target_map.insert(hash.clone(), chunk_data.clone());
+                                            if ratio < self.fp_threshold * self.avg_comp_ratio {
+                                                target_map.insert(hash.clone(), delta)?;
+                                                self.delta_stored += 1;
+                                                self.avg_comp_ratio =
+                                                    self.avg_comp_ratio * 0.95 + ratio * 0.05;
+                                            } else {
+                                                target_map
+                                                    .insert(hash.clone(), chunk_data.clone())?;
+                                            }
                                         }
-                                    } else {
-                                        target_map.insert(hash.clone(), chunk_data.clone());
+                                        Err(_) => {
+                                            target_map.insert(hash.clone(), chunk_data.clone())?;
+                                        }
                                     }
                                     processed_data += chunk_data.len();
                                 }
                                 None => {
-                                    target_map.insert(hash.clone(), chunk_data.clone());
+                                    target_map.insert(hash.clone(), chunk_data.clone())?;
                                     processed_data += chunk_data.len();
                                 }
                             }
@@ -163,5 +174,4 @@ where
             clusterization_report: None,
         })
     }
-    // todo: add update() method for metadata manager
 }

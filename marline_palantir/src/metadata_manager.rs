@@ -21,11 +21,13 @@ pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
 
 impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
     pub fn new(tier_config: TierConfig<N>, lifecycle_configs: [LifecycleTierConfig; N]) -> Self {
-        let features_num =
-            lcm_vec(&tier_config.tier_list).expect("tier_list LCM overflow") as usize;
-        let sf_counts: [usize; N] = std::array::from_fn(|i| {
-            features_num / tier_config.tier_list[i] as usize
-        });
+        let features_num = if let Some(fn_val) = tier_config.features_num {
+            fn_val
+        } else {
+            lcm_vec(&tier_config.tier_list).expect("tier_list LCM overflow") as usize
+        };
+        let sf_counts: [usize; N] =
+            std::array::from_fn(|i| features_num / tier_config.tier_list[i] as usize);
         let sf_tables: [AnySFTable<H>; N] = std::array::from_fn(|i| {
             AnySFTable::from_index(sf_counts[i] as u32).expect("Invalid tier index")
         });
@@ -107,13 +109,14 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
 
 impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
     pub fn default() -> Self {
-        Self::new(TierConfig::new([4, 3, 2]), LifecycleManager::default_configs())
+        Self::new(TierConfig::new([4, 3, 2]), <LifecycleManager<3>>::default_configs())
     }
 }
 
 macro_rules! any_sf_method {
     ($self:ident, $method:ident ($($args:tt)*)) => {
         match $self {
+            Self::T1(t) => t.$method($($args)*),
             Self::T2(t) => t.$method($($args)*),
             Self::T3(t) => t.$method($($args)*),
             Self::T4(t) => t.$method($($args)*),
@@ -130,6 +133,7 @@ macro_rules! any_sf_method {
 }
 
 pub enum AnySFTable<H: ChunkHash + Send + Sync> {
+    T1(SFTable<H, 1>),
     T2(SFTable<H, 2>),
     T3(SFTable<H, 3>),
     T4(SFTable<H, 4>),
@@ -146,6 +150,7 @@ pub enum AnySFTable<H: ChunkHash + Send + Sync> {
 impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
     pub fn from_index(index: u32) -> Option<Self> {
         match index {
+            1 => Some(Self::T1(SFTable::new())),
             2 => Some(Self::T2(SFTable::new())),
             3 => Some(Self::T3(SFTable::new())),
             4 => Some(Self::T4(SFTable::new())),

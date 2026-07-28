@@ -169,9 +169,12 @@ impl Encoder for GdeltaEncoder {
 /// Returns delta as byte vector (INSERT/COPY instructions).
 pub fn gdelta_diff(new_chunk: &[u8], base_chunk: &[u8]) -> Vec<u8> {
     let word_size: usize = 16;
+    if new_chunk.len() < word_size || base_chunk.len() < word_size {
+        return new_chunk.to_vec();
+    }
     let move_bts: usize = 64 / word_size;
     let mask_bts: usize = (base_chunk.len() as f64).log2() as usize;
-    let mut word_hash_offsets: HashMap<u64, usize> = HashMap::new();
+    let mut word_hash_offsets: HashMap<u64, usize> = HashMap::with_capacity(base_chunk.len());
     let mut fp: u64 = 0;
 
     for i in 0..(word_size - 1) {
@@ -193,7 +196,7 @@ pub fn gdelta_diff(new_chunk: &[u8], base_chunk: &[u8]) -> Vec<u8> {
     }
 
     let mut j = 0;
-    while j < new_chunk.len() - word_size + 1 {
+    while j + word_size <= new_chunk.len() {
         fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[j + word_size - 1] as usize]);
         let word_hash: u64 = fp >> (64 - mask_bts);
 

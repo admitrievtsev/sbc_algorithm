@@ -19,6 +19,7 @@ use std::hash::{DefaultHasher, Hasher};
 ///    projection of the fingerprint.
 /// 3. After the scan, raw features are grouped by `tier_list` sizes, sorted,
 ///    and hashed into the final [`SuperFeature`](crate::types::SuperFeature) values.
+#[derive(Clone)]
 pub struct PalantirHasher {
     /// Number of trailing zero bits required to trigger a feature update.
     sampling_rate: u64,
@@ -48,6 +49,14 @@ impl PalantirHasher {
     /// * `tier_list` — Group sizes for each tier (e.g., `vec![4, 3, 2]`).
     pub fn new(sampling_rate: u64, tier_list: Vec<u32>) -> Self {
         let features_num = lcm_vec(&tier_list).unwrap() as usize;
+        let mut linear_coefficients = Vec::with_capacity(features_num);
+        for _ in 0..features_num {
+            linear_coefficients.push(rand::random());
+        }
+        Self { sampling_rate, linear_coefficients, tier_list, features_num }
+    }
+
+    pub fn with_features_num(sampling_rate: u64, tier_list: Vec<u32>, features_num: usize) -> Self {
         let mut linear_coefficients = Vec::with_capacity(features_num);
         for _ in 0..features_num {
             linear_coefficients.push(rand::random());

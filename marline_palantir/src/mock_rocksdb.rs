@@ -62,4 +62,7 @@ impl MockRocksDBMap {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+    pub fn total_bytes(&self) -> usize {
+        self.inner.values().map(|v| v.len()).sum()
+    }
 }

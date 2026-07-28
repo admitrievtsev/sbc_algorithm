@@ -63,6 +63,7 @@ pub mod encoder;
 pub mod error;
 pub mod lifecycle_manager;
 pub mod metadata_manager;
+pub mod mock_rocksdb;
 pub mod palantir_scrubber;
 pub mod sf_generator;
 mod tables;
