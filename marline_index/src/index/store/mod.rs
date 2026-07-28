@@ -40,14 +40,13 @@ where
     /// Inserts an entry: stores each feature→key in the posting lists.
     fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
         self.remove_key(&key)?;
-        let features: Vec<_> = sketch.iter().collect();
-        for feature in features {
-            self.insert_posting(feature, key.clone())?;
+        for f in sketch.iter() {
+            self.insert_posting(f, key.clone())?;
         }
         Ok(())
     }
 
-    /// Removes an entry from the posting lists.
+    /// Removes an entry from all posting lists.
     fn remove_entry(&self, key: &K) -> Result<(), IndexError> {
         self.remove_key(key)
     }

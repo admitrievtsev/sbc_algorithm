@@ -180,6 +180,7 @@ mod tests {
         let index = idx();
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.put(&1, mk([10, 11, 12, 13, 14, 15])).unwrap();
+
         assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), None);
         assert_eq!(index.get(&mk([10, 11, 12, 13, 14, 15])).unwrap(), Some(1));
     }
