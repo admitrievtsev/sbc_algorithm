@@ -1,4 +1,4 @@
-use crate::types::{Chunk, SuperFeatureGenerator};
+use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator};
 use crate::utils::lcm_vec;
 use crate::GEAR;
 use std::hash::{DefaultHasher, Hasher};
