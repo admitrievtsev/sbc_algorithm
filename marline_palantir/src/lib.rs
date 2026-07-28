@@ -43,7 +43,7 @@
 //!
 //! let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
 //! let encoder = GdeltaEncoder;
-//! let tier_config = TierConfig::new([3, 4, 6]);
+//! let tier_config = TierConfig::new([4, 3, 2]);
 //! let lifecycle_configs = LifecycleManager::default_configs();
 //! let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
 //! ```
@@ -63,10 +63,12 @@ pub mod encoder;
 pub mod error;
 pub mod lifecycle_manager;
 pub mod metadata_manager;
+pub mod mock_rocksdb;
 pub mod palantir_scrubber;
 pub mod sf_generator;
 mod tables;
 pub mod types;
+pub mod utils;
 
 // Gear table taken from https://github.com/nlfiedler/fastcdc-rs
 #[rustfmt::skip]

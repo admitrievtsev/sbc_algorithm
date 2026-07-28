@@ -48,6 +48,24 @@ impl<const N: usize> LifecycleManager<N> {
     }
 }
 
+impl LifecycleManager<1> {
+    pub fn default() -> Self {
+        Self::new(Self::default_configs())
+    }
+    pub fn default_configs() -> [LifecycleTierConfig; 1] {
+        [LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false)]
+    }
+}
+
+impl LifecycleManager<2> {
+    pub fn default_configs() -> [LifecycleTierConfig; 2] {
+        [
+            LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false),
+            LifecycleTierConfig::new(6, |x| x, |x| x - 1, |x| x == 0),
+        ]
+    }
+}
+
 impl LifecycleManager<3> {
     pub fn default() -> Self {
         let configs = Self::default_configs();
@@ -59,6 +77,29 @@ impl LifecycleManager<3> {
             LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false),
             LifecycleTierConfig::new(6, |x| x, |x| x - 1, |x| x == 0),
             LifecycleTierConfig::new(3, |x| x, |x| x - 1, |x| x == 0),
+        ]
+    }
+}
+
+impl LifecycleManager<4> {
+    pub fn default_configs() -> [LifecycleTierConfig; 4] {
+        [
+            LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false),
+            LifecycleTierConfig::new(6, |x| x, |x| x - 1, |x| x == 0),
+            LifecycleTierConfig::new(3, |x| x, |x| x - 1, |x| x == 0),
+            LifecycleTierConfig::new(1, |x| x, |x| x - 1, |x| x == 0),
+        ]
+    }
+}
+
+impl LifecycleManager<5> {
+    pub fn default_configs() -> [LifecycleTierConfig; 5] {
+        [
+            LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false),
+            LifecycleTierConfig::new(6, |x| x, |x| x - 1, |x| x == 0),
+            LifecycleTierConfig::new(3, |x| x, |x| x - 1, |x| x == 0),
+            LifecycleTierConfig::new(1, |x| x, |x| x - 1, |x| x == 0),
+            LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false),
         ]
     }
 }
