@@ -4,20 +4,20 @@ use std::collections::HashMap;
 use std::io;
 
 pub struct MockRocksDBMap {
-    inner: HashMap<Vec<u8>, Vec<u8>>,
+    inner: HashMap<[u8; 32], Vec<u8>>,
     pub get_count: Cell<usize>,
     pub insert_count: Cell<usize>,
     pub clear_count: Cell<usize>,
 }
 
-impl Database<Vec<u8>, Vec<u8>> for MockRocksDBMap {
-    fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) -> io::Result<()> {
+impl Database<[u8; 32], Vec<u8>> for MockRocksDBMap {
+    fn insert(&mut self, key: [u8; 32], value: Vec<u8>) -> io::Result<()> {
         self.insert_count.set(self.insert_count.get() + 1);
         self.inner.insert(key, value);
         Ok(())
     }
 
-    fn get(&self, key: &Vec<u8>) -> io::Result<Vec<u8>> {
+    fn get(&self, key: &[u8; 32]) -> io::Result<Vec<u8>> {
         self.get_count.set(self.get_count.get() + 1);
         self.inner
             .get(key)
@@ -25,17 +25,17 @@ impl Database<Vec<u8>, Vec<u8>> for MockRocksDBMap {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "key not found"))
     }
 
-    fn contains(&self, key: &Vec<u8>) -> bool {
+    fn contains(&self, key: &[u8; 32]) -> bool {
         self.inner.contains_key(key)
     }
 }
 
-impl IterableDatabase<Vec<u8>, Vec<u8>> for MockRocksDBMap {
-    fn iterator(&self) -> Box<dyn Iterator<Item = (&Vec<u8>, &Vec<u8>)> + '_> {
+impl IterableDatabase<[u8; 32], Vec<u8>> for MockRocksDBMap {
+    fn iterator(&self) -> Box<dyn Iterator<Item = (&[u8; 32], &Vec<u8>)> + '_> {
         Box::new(self.inner.iter())
     }
 
-    fn iterator_mut(&mut self) -> Box<dyn Iterator<Item = (&Vec<u8>, &mut Vec<u8>)> + '_> {
+    fn iterator_mut(&mut self) -> Box<dyn Iterator<Item = (&[u8; 32], &mut Vec<u8>)> + '_> {
         Box::new(self.inner.iter_mut())
     }
 
