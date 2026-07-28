@@ -1,6 +1,7 @@
 use crate::lifecycle_manager::{LifecycleManager, LifecycleTierConfig};
 use crate::tables::{FPTable, SFTable};
 use crate::types::{BlockID, SuperFeature, TierConfig};
+use crate::utils::lcm_vec;
 use chunkfs::ChunkHash;
 use marline_index::index::metrics::Metric;
 use marline_index::index::IndexError;
@@ -14,19 +15,24 @@ pub type TierID = u8;
 pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
     fp_table: FPTable<H>,
     sf_tables: [AnySFTable<H>; N],
-    tier_config: TierConfig<N>,
+    sf_counts: [usize; N],
     lifecycle_manager: LifecycleManager<N>,
 }
 
 impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
     pub fn new(tier_config: TierConfig<N>, lifecycle_configs: [LifecycleTierConfig; N]) -> Self {
+        let features_num =
+            lcm_vec(&tier_config.tier_list).expect("tier_list LCM overflow") as usize;
+        let sf_counts: [usize; N] = std::array::from_fn(|i| {
+            features_num / tier_config.tier_list[i] as usize
+        });
         let sf_tables: [AnySFTable<H>; N] = std::array::from_fn(|i| {
-            AnySFTable::from_index(tier_config.tier_list[i]).expect("Invalid tier index")
+            AnySFTable::from_index(sf_counts[i] as u32).expect("Invalid tier index")
         });
         Self {
             fp_table: FPTable::<H>::new(),
             sf_tables,
-            tier_config,
+            sf_counts,
             lifecycle_manager: LifecycleManager::new(lifecycle_configs),
         }
     }
@@ -46,7 +52,7 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
 
         for i in 0..N {
             first_index = last_index;
-            last_index += self.tier_config.tier_list[i] as usize;
+            last_index += self.sf_counts[i];
             let slice = &super_features[first_index..last_index];
 
             let table = &self.sf_tables[i];
@@ -73,7 +79,7 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
 
         for i in 0..N {
             first_index = last_index;
-            last_index += self.tier_config.tier_list[i] as usize;
+            last_index += self.sf_counts[i];
             let slice = &super_features[first_index..last_index];
             let metric = self.lifecycle_manager.default_tier_metric(i as TierID);
             self.sf_tables[i].insert(&block_id, slice, metric);
@@ -101,15 +107,39 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
 
 impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
     pub fn default() -> Self {
-        Self::new(TierConfig::new([3, 4, 6]), LifecycleManager::default_configs())
+        Self::new(TierConfig::new([4, 3, 2]), LifecycleManager::default_configs())
     }
+}
+
+macro_rules! any_sf_method {
+    ($self:ident, $method:ident ($($args:tt)*)) => {
+        match $self {
+            Self::T2(t) => t.$method($($args)*),
+            Self::T3(t) => t.$method($($args)*),
+            Self::T4(t) => t.$method($($args)*),
+            Self::T5(t) => t.$method($($args)*),
+            Self::T6(t) => t.$method($($args)*),
+            Self::T7(t) => t.$method($($args)*),
+            Self::T8(t) => t.$method($($args)*),
+            Self::T9(t) => t.$method($($args)*),
+            Self::T10(t) => t.$method($($args)*),
+            Self::T11(t) => t.$method($($args)*),
+            Self::T12(t) => t.$method($($args)*),
+        }
+    };
 }
 
 pub enum AnySFTable<H: ChunkHash + Send + Sync> {
     T2(SFTable<H, 2>),
     T3(SFTable<H, 3>),
     T4(SFTable<H, 4>),
+    T5(SFTable<H, 5>),
     T6(SFTable<H, 6>),
+    T7(SFTable<H, 7>),
+    T8(SFTable<H, 8>),
+    T9(SFTable<H, 9>),
+    T10(SFTable<H, 10>),
+    T11(SFTable<H, 11>),
     T12(SFTable<H, 12>),
 }
 
@@ -119,50 +149,32 @@ impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
             2 => Some(Self::T2(SFTable::new())),
             3 => Some(Self::T3(SFTable::new())),
             4 => Some(Self::T4(SFTable::new())),
+            5 => Some(Self::T5(SFTable::new())),
             6 => Some(Self::T6(SFTable::new())),
+            7 => Some(Self::T7(SFTable::new())),
+            8 => Some(Self::T8(SFTable::new())),
+            9 => Some(Self::T9(SFTable::new())),
+            10 => Some(Self::T10(SFTable::new())),
+            11 => Some(Self::T11(SFTable::new())),
             12 => Some(Self::T12(SFTable::new())),
             _ => None,
         }
     }
 
     pub fn nearest(&self, features: &[SuperFeature]) -> Option<BlockID<H>> {
-        match self {
-            Self::T2(t) => t.nearest(features),
-            Self::T3(t) => t.nearest(features),
-            Self::T4(t) => t.nearest(features),
-            Self::T6(t) => t.nearest(features),
-            Self::T12(t) => t.nearest(features),
-        }
+        any_sf_method!(self, nearest(features))
     }
 
     pub fn insert(&self, block_id: &BlockID<H>, features: &[SuperFeature], metric: Metric) {
-        match self {
-            Self::T2(t) => t.insert(block_id, features, metric),
-            Self::T3(t) => t.insert(block_id, features, metric),
-            Self::T4(t) => t.insert(block_id, features, metric),
-            Self::T6(t) => t.insert(block_id, features, metric),
-            Self::T12(t) => t.insert(block_id, features, metric),
-        }
+        any_sf_method!(self, insert(block_id, features, metric))
     }
 
     pub fn len(&self) -> usize {
-        match self {
-            Self::T2(t) => t.len(),
-            Self::T3(t) => t.len(),
-            Self::T4(t) => t.len(),
-            Self::T6(t) => t.len(),
-            Self::T12(t) => t.len(),
-        }
+        any_sf_method!(self, len())
     }
 
     pub fn is_empty(&self) -> bool {
-        match self {
-            Self::T2(t) => t.is_empty(),
-            Self::T3(t) => t.is_empty(),
-            Self::T4(t) => t.is_empty(),
-            Self::T6(t) => t.is_empty(),
-            Self::T12(t) => t.is_empty(),
-        }
+        any_sf_method!(self, is_empty())
     }
 
     pub fn get_with_upd_metric(
@@ -170,13 +182,7 @@ impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
         features: &[SuperFeature],
         f: impl FnOnce(Metric) -> Metric,
     ) -> Option<BlockID<H>> {
-        match self {
-            Self::T2(t) => t.get_with_upd_metric(features, f),
-            Self::T3(t) => t.get_with_upd_metric(features, f),
-            Self::T4(t) => t.get_with_upd_metric(features, f),
-            Self::T6(t) => t.get_with_upd_metric(features, f),
-            Self::T12(t) => t.get_with_upd_metric(features, f),
-        }
+        any_sf_method!(self, get_with_upd_metric(features, f))
     }
 
     pub fn update_and_clean(
@@ -184,12 +190,6 @@ impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
         update_fn: impl FnMut(Metric) -> Metric,
         cleanup_fn: impl Fn(Metric) -> bool,
     ) -> Result<(), IndexError> {
-        match self {
-            Self::T2(t) => t.update_and_clean(update_fn, cleanup_fn),
-            Self::T3(t) => t.update_and_clean(update_fn, cleanup_fn),
-            Self::T4(t) => t.update_and_clean(update_fn, cleanup_fn),
-            Self::T6(t) => t.update_and_clean(update_fn, cleanup_fn),
-            Self::T12(t) => t.update_and_clean(update_fn, cleanup_fn),
-        }
+        any_sf_method!(self, update_and_clean(update_fn, cleanup_fn))
     }
 }

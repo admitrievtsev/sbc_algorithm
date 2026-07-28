@@ -3,27 +3,11 @@ use std::hash::Hash;
 use std::io;
 
 use chunkfs::{ChunkHash, Data, DataContainer, IterableDatabase, Scrub, ScrubMeasurements};
-use num::integer::gcd;
 
 use crate::encoder::PalantirEncoder;
 use crate::lifecycle_manager::LifecycleTierConfig;
 use crate::metadata_manager::MetadataManager;
 use crate::types::{BlockID, Chunk, SuperFeatureGenerator, TierConfig};
-
-#[allow(dead_code)]
-fn lcm_checked(a: u32, b: u32) -> Option<u32> {
-    let gcd_val = gcd(a, b);
-    (a / gcd_val).checked_mul(b)
-}
-
-#[allow(dead_code)]
-fn lcm_vec(nums: &[u32]) -> Option<u32> {
-    let mut res: u32 = 1;
-    for &i in nums {
-        res = lcm_checked(res, i)?;
-    }
-    Some(res)
-}
 
 /// Core scrubbing pipeline that applies the Palantir method to a storage backend.
 ///
@@ -127,7 +111,7 @@ where
                     let chunk = Chunk::new(chunk_data.clone());
                     let super_features = self.sf_gen.generate(&chunk);
                     match self.metadata_manager.lookup_fingerprint(hash) {
-                        Some(_) => todo!(),
+                        Some(_) => {},
                         None => {
                             match self.metadata_manager.lookup_super_features(&super_features) {
                                 Some((base_hash, _)) => {

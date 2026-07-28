@@ -1,6 +1,6 @@
 use crate::types::{Chunk, SuperFeatureGenerator};
+use crate::utils::lcm_vec;
 use crate::GEAR;
-use num::integer::gcd;
 use std::hash::{DefaultHasher, Hasher};
 
 /// Generates super-features using a gear-hash rolling hash with random linear projections.
@@ -30,21 +30,6 @@ pub struct PalantirHasher {
     features_num: usize,
 }
 
-/// Computes the least common multiple of `a` and `b`, returning `None` on overflow.
-fn lcm_checked(a: u32, b: u32) -> Option<u32> {
-    let gcd_val = gcd(a, b);
-    (a / gcd_val).checked_mul(b)
-}
-
-/// Computes the least common multiple of all numbers in `nums`, returning `None` on overflow.
-fn lcm_vec(nums: &[u32]) -> Option<u32> {
-    let mut res: u32 = 1;
-    for &i in nums {
-        res = lcm_checked(res, i)?;
-    }
-    Some(res)
-}
-
 impl PalantirHasher {
     /// Creates a new `PalantirHasher`.
     ///
@@ -60,7 +45,7 @@ impl PalantirHasher {
     /// # Arguments
     /// * `sampling_rate` — Number of trailing-zero bits required on the
     ///   gear-hash fingerprint to trigger feature extraction.
-    /// * `tier_list` — Group sizes for each tier (e.g., `vec![3, 4, 6]`).
+    /// * `tier_list` — Group sizes for each tier (e.g., `vec![4, 3, 2]`).
     pub fn new(sampling_rate: u64, tier_list: Vec<u32>) -> Self {
         let features_num = lcm_vec(&tier_list).unwrap() as usize;
         let mut linear_coefficients = Vec::with_capacity(features_num);
