@@ -20,12 +20,16 @@ struct Config {
 
 fn configs() -> Vec<Config> {
     vec![
-        Config { name: "ODESS",    tier_list: vec![2],      features_num_override: Some(12) },
-        Config { name: "N2_G3-2",          tier_list: vec![3, 2],   features_num_override: None },
-        Config { name: "N3_G4-3-2",        tier_list: vec![4, 3, 2], features_num_override: None },
-        Config { name: "N3_G8-4-2",        tier_list: vec![8, 4, 2], features_num_override: None },
-        Config { name: "N4_G6-4-3-2",      tier_list: vec![6, 4, 3, 2], features_num_override: None },
-        Config { name: "N5_G12-6-4-3-2",   tier_list: vec![12, 6, 4, 3, 2], features_num_override: None },
+        Config { name: "ODESS", tier_list: vec![2], features_num_override: Some(12) },
+        Config { name: "N2_G3-2", tier_list: vec![3, 2], features_num_override: None },
+        Config { name: "N3_G4-3-2", tier_list: vec![4, 3, 2], features_num_override: None },
+        Config { name: "N3_G8-4-2", tier_list: vec![8, 4, 2], features_num_override: None },
+        Config { name: "N4_G6-4-3-2", tier_list: vec![6, 4, 3, 2], features_num_override: None },
+        Config {
+            name: "N5_G12-6-4-3-2",
+            tier_list: vec![12, 6, 4, 3, 2],
+            features_num_override: None,
+        },
     ]
 }
 
@@ -46,19 +50,19 @@ fn collect_files(dir: &Path, files: &mut Vec<Vec<u8>>) {
 
 fn run_metrics(
     name: &str,
-    scrubber: impl chunkfs::Scrub<[u8; 32], HashMap<[u8; 32], DataContainer<[u8; 32]>>, [u8; 32], MockRocksDBMap> + 'static,
+    scrubber: impl chunkfs::Scrub<
+            [u8; 32],
+            HashMap<[u8; 32], DataContainer<[u8; 32]>>,
+            [u8; 32],
+            MockRocksDBMap,
+        > + 'static,
     kernel_files: &[Vec<Vec<u8>>],
 ) {
     let database: HashMap<[u8; 32], DataContainer<[u8; 32]>> = HashMap::default();
     let target_map = MockRocksDBMap::new();
     let hasher = Sha256Hasher::default();
 
-    let mut fs = FileSystem::new_with_scrubber(
-        database,
-        target_map,
-        Box::new(scrubber),
-        hasher,
-    );
+    let mut fs = FileSystem::new_with_scrubber(database, target_map, Box::new(scrubber), hasher);
 
     let chunk_size = SizeParams::new(8192, 32768, 65536);
     let original_total: usize = kernel_files.iter().flat_map(|f| f.iter()).map(|d| d.len()).sum();
@@ -96,16 +100,21 @@ fn run_metrics(
 
 fn main() {
     let kernel_dirs = [
-        "/home/mak/RustroverProjects/marline/linux-3.4.5",
-        "/home/mak/RustroverProjects/marline/linux-3.4.6",
-        "/home/mak/RustroverProjects/marline/linux-3.4.7",
+        "/home/maxllon/pornfolder/marline/linux-3.4.5",
+        "/home/maxllon/pornfolder/marline/linux-3.4.6",
+        "/home/maxllon/pornfolder/marline/linux-3.4.7",
     ];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
     for dir in &kernel_dirs {
         let mut files = Vec::new();
         collect_files(Path::new(dir), &mut files);
-        eprintln!("  {}: {} files, {:.2} MB", dir, files.len(), files.iter().map(|d| d.len()).sum::<usize>() as f64 / (1024.0 * 1024.0));
+        eprintln!(
+            "  {}: {} files, {:.2} MB",
+            dir,
+            files.len(),
+            files.iter().map(|d| d.len()).sum::<usize>() as f64 / (1024.0 * 1024.0)
+        );
         kernel_files.push(files);
     }
 
@@ -130,7 +139,9 @@ fn main() {
                     TierConfig::new(arr)
                 };
                 let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
+                    sf_gen,
+                    GdeltaEncoder,
+                    tier_config,
                     LifecycleManager::<1>::default_configs(),
                 );
                 run_metrics(cfg.name, scrubber, &kernel_files);
@@ -139,7 +150,9 @@ fn main() {
                 let arr: [u32; 2] = cfg.tier_list.as_slice().try_into().unwrap();
                 let tier_config = TierConfig::new(arr);
                 let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
+                    sf_gen,
+                    GdeltaEncoder,
+                    tier_config,
                     LifecycleManager::<2>::default_configs(),
                 );
                 run_metrics(cfg.name, scrubber, &kernel_files);
@@ -148,7 +161,9 @@ fn main() {
                 let arr: [u32; 3] = cfg.tier_list.as_slice().try_into().unwrap();
                 let tier_config = TierConfig::new(arr);
                 let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
+                    sf_gen,
+                    GdeltaEncoder,
+                    tier_config,
                     LifecycleManager::<3>::default_configs(),
                 );
                 run_metrics(cfg.name, scrubber, &kernel_files);
@@ -157,7 +172,9 @@ fn main() {
                 let arr: [u32; 4] = cfg.tier_list.as_slice().try_into().unwrap();
                 let tier_config = TierConfig::new(arr);
                 let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
+                    sf_gen,
+                    GdeltaEncoder,
+                    tier_config,
                     LifecycleManager::<4>::default_configs(),
                 );
                 run_metrics(cfg.name, scrubber, &kernel_files);
@@ -166,7 +183,9 @@ fn main() {
                 let arr: [u32; 5] = cfg.tier_list.as_slice().try_into().unwrap();
                 let tier_config = TierConfig::new(arr);
                 let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
+                    sf_gen,
+                    GdeltaEncoder,
+                    tier_config,
                     LifecycleManager::<5>::default_configs(),
                 );
                 run_metrics(cfg.name, scrubber, &kernel_files);
