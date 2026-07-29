@@ -76,7 +76,6 @@ impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: us
             metadata_manager: MetadataManager::new(tier_config, lifecycle_configs),
             encoder,
             fp_threshold: 0.9,
-            // avg_comp_ratio: 1.0,
             chunks_processed: 0,
             delta_stored: 0,
             delta_bases: HashMap::new(),
@@ -142,13 +141,10 @@ where
                                                 zstd::encode_all(chunk_data.as_slice(), 0)?;
                                             let ratio = delta_compressed.len() as f64
                                                 / simple_compressed.len() as f64;
-
                                             if ratio < self.fp_threshold {
                                                 target_map.insert(hash.clone(), delta_compressed)?;
                                                 self.delta_bases.insert(hash.clone(), base_hash.hash.clone());
                                                 self.delta_stored += 1;
-                                                // self.avg_comp_ratio =
-                                                //     self.avg_comp_ratio * 0.95 + ratio * 0.05;
                                             } else {
                                                 target_map
                                                     .insert(hash.clone(), chunk_data.clone())?;
