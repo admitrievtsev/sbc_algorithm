@@ -3,7 +3,7 @@
 /// Configuration for heuristic-guided similarity search.
 ///
 /// Default values preserve the original exhaustive overlap-count behaviour.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SearchConfig {
     /// Drop candidates whose Jaccard score cannot reach this threshold.
     ///
@@ -22,12 +22,6 @@ pub struct SearchConfig {
     ///
     /// `None` disables FP filtering. Requires a metrics map attached to the index.
     pub fp_metric_threshold: Option<u8>,
-}
-
-impl Default for SearchConfig {
-    fn default() -> Self {
-        Self { min_jaccard: None, max_df: None, rare_first: false, fp_metric_threshold: None }
-    }
 }
 
 impl SearchConfig {

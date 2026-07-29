@@ -21,9 +21,6 @@ where
     /// Removes the key from the feature's posting list.
     fn remove_posting(&self, feature: F, key: &K) -> Result<(), IndexError>;
 
-    /// Removes a key from all posting lists.
-    fn remove_key(&self, key: &K) -> Result<(), IndexError>;
-
     /// Returns the number of distinct indexed features.
     fn len_postings(&self) -> Result<usize, IndexError>;
 
@@ -39,7 +36,6 @@ where
 {
     /// Inserts an entry: stores each feature→key in the posting lists.
     fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
-        self.remove_key(&key)?;
         for f in sketch.iter() {
             self.insert_posting(f, key.clone())?;
         }
@@ -47,8 +43,11 @@ where
     }
 
     /// Removes an entry from all posting lists.
-    fn remove_entry(&self, key: &K) -> Result<(), IndexError> {
-        self.remove_key(key)
+    fn remove_entry(&self, key: &K, sketch: &S) -> Result<(), IndexError> {
+        for f in sketch.iter() {
+            self.remove_posting(f, key)?;
+        }
+        Ok(())
     }
 
     /// Removes all entries from the storage.

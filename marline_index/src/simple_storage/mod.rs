@@ -58,7 +58,7 @@ where
         Ok(self.top_k(query, 1)?.into_iter().next().map(|r| r.0))
     }
 
-    fn remove(&self, key: &K) -> Result<(), Self::Error> {
+    fn remove(&self, key: &K, _sketch: &S) -> Result<(), Self::Error> {
         self.entries.write().expect("rwlock poisoned").retain(|(k, _)| k != key);
         Ok(())
     }
@@ -95,7 +95,7 @@ mod tests {
     fn remove_deletes_all_entries_for_key() {
         let index = LinearSearchIndex::new();
         index.put(&1, mk([1, 2, 3])).unwrap();
-        index.remove(&1).unwrap();
+        index.remove(&1, &mk([1, 2, 3])).unwrap();
 
         assert!(index.top_k(&mk([1, 2, 3]), 10).unwrap().is_empty());
     }

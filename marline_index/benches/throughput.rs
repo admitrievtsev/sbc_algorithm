@@ -1,6 +1,7 @@
 use std::io::Read;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use marline_index::heuristic_index::{HeuristicInvertedSketchIndex, SearchConfig};
 use marline_index::index::store::IndexStorage;
 use marline_index::index::{InvertedSketchIndex, SketchIndexApi};
 use marline_index::simple_storage::LinearSearchIndex;
@@ -9,6 +10,7 @@ use marline_sketcher::odess_hasher::{IndexType, OdessHasher, SuperFeatureConfig}
 use marline_sketcher::{SBCHash, SBCHasher};
 
 type BenchIndex = InvertedSketchIndex<u64, U64Sketch<6>, IndexStorage<u64, u64>>;
+type BenchHeuristicIndex = HeuristicInvertedSketchIndex<u64, U64Sketch<6>, IndexStorage<u64, u64>>;
 
 // Gear table copied from marline_sketcher/src/lib.rs
 #[rustfmt::skip]
@@ -169,7 +171,7 @@ fn hash_to_sketch(hasher: &OdessHasher, chunk: &[u8]) -> U64Sketch<6> {
     let mut arr = [0u64; 6];
     let len = features.len().min(6);
     arr[..len].copy_from_slice(&features[..len]);
-    U64Sketch::new(arr).unwrap()
+    U64Sketch::new(arr)
 }
 
 fn configure() -> Criterion {
@@ -250,6 +252,35 @@ fn bench_throughput(c: &mut Criterion) {
         b.iter(|| {
             for (_, sketch) in &chunks_v3 {
                 let r = std::hint::black_box(linear_index.top_k(sketch, 10).unwrap());
+                std::hint::black_box(r);
+            }
+        })
+    });
+    group.finish();
+
+    // === Heuristic index benchmark ===
+    let heuristic_config = SearchConfig {
+        min_jaccard: Some(0.3),
+        max_df: Some(500),
+        rare_first: true,
+        fp_metric_threshold: None,
+    };
+    let heuristic_index = BenchHeuristicIndex::with_config(IndexStorage::new(), heuristic_config);
+    for (i, (_, sketch)) in chunks_v1.iter().enumerate() {
+        heuristic_index.put(&(i as u64), *sketch).unwrap();
+    }
+    let offset = chunks_v1.len();
+    for (i, (_, sketch)) in chunks_v2.iter().enumerate() {
+        heuristic_index.put(&((offset + i) as u64), *sketch).unwrap();
+    }
+
+    let mut group = c.benchmark_group("heuristic_throughput");
+    group.sample_size(10);
+    group.throughput(Throughput::Bytes(total_query_bytes));
+    group.bench_function("kernels_6sf", |b| {
+        b.iter(|| {
+            for (_, sketch) in &chunks_v3 {
+                let r = std::hint::black_box(heuristic_index.top_k(sketch, 10).unwrap());
                 std::hint::black_box(r);
             }
         })

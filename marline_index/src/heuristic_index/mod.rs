@@ -150,8 +150,8 @@ where
         Ok(())
     }
 
-    fn remove(&self, key: &K) -> Result<(), Self::Error> {
-        self.store.remove_entry(key)?;
+    fn remove(&self, key: &K, sketch: &S) -> Result<(), Self::Error> {
+        self.store.remove_entry(key, sketch)?;
         self.metrics.remove_metric(key);
         Ok(())
     }
@@ -297,16 +297,6 @@ mod tests {
     }
 
     #[test]
-    fn put_overwrite_removes_old_postings() {
-        let index = idx();
-        index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
-        index.put(&1, mk([10, 11, 12, 13, 14, 15])).unwrap();
-
-        assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), None);
-        assert_eq!(index.get(&mk([10, 11, 12, 13, 14, 15])).unwrap(), Some(1));
-    }
-
-    #[test]
     fn repeated_put_same_key_does_not_duplicate_candidates() {
         let index = idx();
         let sketch = mk([1, 2, 3, 4, 5, 6]);
@@ -322,11 +312,12 @@ mod tests {
     #[test]
     fn remove_clears_postings_and_metrics() {
         let index = idx();
-        index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
+        let sketch = mk([1, 2, 3, 4, 5, 6]);
+        index.put(&1, sketch).unwrap();
         index.record_false_positive(&1);
         assert_eq!(index.get_metric(&1), Some(1));
 
-        index.remove(&1).unwrap();
+        index.remove(&1, &mk([1, 2, 3, 4, 5, 6])).unwrap();
         assert_eq!(index.get_metric(&1), None);
         assert!(index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap().is_empty());
     }

@@ -13,7 +13,7 @@ fn make_sketch<const N: usize>(seed: u32) -> U32Sketch<N> {
     for i in 0..N {
         items[i] = seed.wrapping_mul(31).wrapping_add(i as u32 * 17);
     }
-    U32Sketch::new(items).unwrap()
+    U32Sketch::new(items)
 }
 
 fn fill_index<const N: usize>(count: usize) -> BenchIndex<N> {

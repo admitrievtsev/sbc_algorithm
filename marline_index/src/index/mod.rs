@@ -36,7 +36,7 @@ where
     fn put(&self, key: &K, sketch: S) -> Result<(), Self::Error>;
 
     /// Removes the entry associated with the given key.
-    fn remove(&self, key: &K) -> Result<(), Self::Error>;
+    fn remove(&self, key: &K, sketch: &S) -> Result<(), Self::Error>;
 
     /// Returns the top `k` entries most similar to the query sketch.
     fn top_k(&self, query: &S, k: usize) -> Result<Vec<(K, f64)>, Self::Error>;
