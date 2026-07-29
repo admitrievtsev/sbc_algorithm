@@ -10,13 +10,6 @@ use std::hash::Hash;
 pub mod similarity;
 pub use similarity::SimilarityScore;
 
-/// Errors that can occur when creating a [`FixedSketch`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SketchError {
-    /// The sketch has zero elements (empty array provided).
-    EmptySketch,
-}
-
 /// Trait for a fixed-size set of features used in similarity search.
 ///
 /// Implementations must store elements sorted.
@@ -70,19 +63,16 @@ where
 {
     /// Creates a new `FixedSketch` from an array.
     ///
-    /// The input is sorted automatically. Returns an error if the array
-    /// if `N = 0`.
+    /// The input is sorted automatically.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// - [`SketchError::EmptySketch`] if `N == 0`.
-    pub fn new(mut items: [F; N]) -> Result<Self, SketchError> {
-        if N == 0 {
-            return Err(SketchError::EmptySketch);
-        }
+    /// Panics if `N == 0`, as zero-element sketches are not supported.
+    pub fn new(mut items: [F; N]) -> Self {
+        assert!(N > 0, "FixedSketch must have N > 0");
         items.sort_unstable();
 
-        Ok(Self { items })
+        Self { items }
     }
 
     /// Returns the sketch elements as a fixed-size array reference.
@@ -154,109 +144,109 @@ mod tests {
 
     #[test]
     fn new_sorts_unsorted_input() {
-        let s = U32Sketch::<3>::new([30, 10, 20]).unwrap();
+        let s = U32Sketch::<3>::new([30, 10, 20]);
         assert_eq!(s.as_array(), &[10, 20, 30]);
     }
 
     #[test]
     fn new_preserves_already_sorted() {
-        let s = U32Sketch::<3>::new([10, 20, 30]).unwrap();
+        let s = U32Sketch::<3>::new([10, 20, 30]);
         assert_eq!(s.as_array(), &[10, 20, 30]);
     }
 
     #[test]
     fn new_different_permutations_equal() {
-        let a = U32Sketch::<6>::new([60, 10, 30, 20, 50, 40]).unwrap();
-        let b = U32Sketch::<6>::new([40, 50, 60, 10, 20, 30]).unwrap();
+        let a = U32Sketch::<6>::new([60, 10, 30, 20, 50, 40]);
+        let b = U32Sketch::<6>::new([40, 50, 60, 10, 20, 30]);
         assert_eq!(a, b);
     }
 
     #[test]
+    #[should_panic(expected = "FixedSketch must have N > 0")]
     fn new_rejects_empty() {
-        let err = U32Sketch::<0>::new([]).unwrap_err();
-        assert_eq!(err, SketchError::EmptySketch);
+        U32Sketch::<0>::new([]);
     }
 
     #[test]
     fn as_array_returns_sorted() {
-        let s = U32Sketch::<3>::new([30, 10, 20]).unwrap();
+        let s = U32Sketch::<3>::new([30, 10, 20]);
         assert_eq!(s.as_array(), &[10, 20, 30]);
     }
 
     #[test]
     fn as_slice_matches_as_array() {
-        let s = U32Sketch::<3>::new([30, 10, 20]).unwrap();
+        let s = U32Sketch::<3>::new([30, 10, 20]);
         assert_eq!(s.as_slice(), s.as_array() as &[u32]);
     }
 
     #[test]
     fn len_returns_n() {
-        assert_eq!(U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]).unwrap().len(), 6);
-        assert_eq!(U32Sketch::<4>::new([1, 2, 3, 4]).unwrap().len(), 4);
-        assert_eq!(U32Sketch::<3>::new([1, 2, 3]).unwrap().len(), 3);
+        assert_eq!(U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]).len(), 6);
+        assert_eq!(U32Sketch::<4>::new([1, 2, 3, 4]).len(), 4);
+        assert_eq!(U32Sketch::<3>::new([1, 2, 3]).len(), 3);
     }
 
     #[test]
     fn is_empty_for_non_empty() {
-        assert!(!U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]).unwrap().is_empty());
+        assert!(!U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]).is_empty());
     }
 
     #[test]
     fn iter_returns_all_elements() {
-        let s = U32Sketch::<3>::new([30, 10, 20]).unwrap();
+        let s = U32Sketch::<3>::new([30, 10, 20]);
         let collected: Vec<u32> = s.iter().collect();
         assert_eq!(collected, vec![10, 20, 30]);
     }
 
     #[test]
     fn contains_present_value() {
-        let s = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
+        let s = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
         assert!(s.contains(30));
     }
 
     #[test]
     fn contains_absent_value() {
-        let s = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
+        let s = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
         assert!(!s.contains(99));
     }
 
     #[test]
     fn full_intersection() {
-        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
-        let b = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
+        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
+        let b = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
         assert_eq!(a.intersection_size(&b), 6);
     }
 
     #[test]
     fn partial_intersection() {
-        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
-        let b = U32Sketch::<6>::new([10, 20, 30, 70, 80, 90]).unwrap();
+        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
+        let b = U32Sketch::<6>::new([10, 20, 30, 70, 80, 90]);
         assert_eq!(a.intersection_size(&b), 3);
     }
 
     #[test]
     fn zero_intersection() {
-        let a = U32Sketch::<3>::new([10, 20, 30]).unwrap();
-        let b = U32Sketch::<3>::new([40, 50, 60]).unwrap();
+        let a = U32Sketch::<3>::new([10, 20, 30]);
+        let b = U32Sketch::<3>::new([40, 50, 60]);
         assert_eq!(a.intersection_size(&b), 0);
     }
 
     #[test]
     fn self_intersection() {
-        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
+        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
         assert_eq!(a.intersection_size(&a), 6);
     }
 
     #[test]
     fn intersection_is_commutative() {
-        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]).unwrap();
-        let b = U32Sketch::<6>::new([10, 20, 30, 70, 80, 90]).unwrap();
+        let a = U32Sketch::<6>::new([10, 20, 30, 40, 50, 60]);
+        let b = U32Sketch::<6>::new([10, 20, 30, 70, 80, 90]);
         assert_eq!(a.intersection_size(&b), b.intersection_size(&a));
     }
 
     #[test]
     fn supports_u64_features() {
-        let s = U64Sketch::<3>::new([30_u64, 10, 20]).unwrap();
+        let s = U64Sketch::<3>::new([30_u64, 10, 20]);
         assert_eq!(s.as_array(), &[10, 20, 30]);
         assert!(s.contains(20));
     }
