@@ -43,7 +43,7 @@ impl<K: Clone + Eq + Hash + Send + Sync> MetricsMap<K> {
     ) {
         let mut data = self.data.write().unwrap();
 
-        for (_, metric) in data.iter_mut() {
+        for metric in data.values_mut() {
             update_fn(metric);
         }
 
