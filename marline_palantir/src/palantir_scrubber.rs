@@ -63,7 +63,6 @@ impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: us
     /// | Field | Value |
     /// |-------|-------|
     /// | `fp_threshold` | `0.9` — false-positive ratio cap |
-    /// | `avg_comp_ratio` | `1.0` — running average starts at 1.0 (no compression benefit) |
     /// | `chunks_processed` | `0` |
     pub fn new(
         sf_gen: S,
