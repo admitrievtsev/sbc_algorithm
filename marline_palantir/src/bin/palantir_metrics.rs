@@ -20,8 +20,7 @@ struct Config {
 
 fn configs() -> Vec<Config> {
     vec![
-        Config { name: "N1_G2",            tier_list: vec![2],      features_num_override: None },
-        Config { name: "ODESS",    tier_list: vec![6],      features_num_override: Some(12) },
+        Config { name: "ODESS",    tier_list: vec![2],      features_num_override: Some(12) },
         Config { name: "N2_G3-2",          tier_list: vec![3, 2],   features_num_override: None },
         Config { name: "N3_G4-3-2",        tier_list: vec![4, 3, 2], features_num_override: None },
         Config { name: "N3_G8-4-2",        tier_list: vec![8, 4, 2], features_num_override: None },
