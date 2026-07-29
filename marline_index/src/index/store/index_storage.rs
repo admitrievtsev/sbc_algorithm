@@ -22,6 +22,26 @@ impl<K, F> IndexStorage<K, F> {
     fn postings_write(&self) -> RwLockWriteGuard<'_, HashMap<F, HashSet<K>>> {
         self.postings.write().expect("postings lock poisoned")
     }
+
+    fn store_entry_features(&self, key: K, features: Vec<F>) -> bool
+    where
+        K: Eq + Hash,
+    {
+        match self.entries.write().expect("entries lock poisoned").entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(features);
+                true
+            }
+            Entry::Occupied(_) => false,
+        }
+    }
+
+    fn take_entry_features(&self, key: &K) -> Option<Vec<F>>
+    where
+        K: Eq + Hash,
+    {
+        self.entries.write().expect("entries lock poisoned").remove(key)
+    }
 }
 
 impl<K, F> Default for IndexStorage<K, F> {
@@ -56,20 +76,6 @@ where
         Ok(())
     }
 
-    fn store_entry_features(&self, key: K, features: Vec<F>) -> Result<bool, IndexError> {
-        match self.entries.write().expect("entries lock poisoned").entry(key) {
-            Entry::Vacant(entry) => {
-                entry.insert(features);
-                Ok(true)
-            }
-            Entry::Occupied(_) => Ok(false),
-        }
-    }
-
-    fn take_entry_features(&self, key: &K) -> Result<Option<Vec<F>>, IndexError> {
-        Ok(self.entries.write().expect("entries lock poisoned").remove(key))
-    }
-
     fn len_postings(&self) -> Result<usize, IndexError> {
         Ok(self.postings_read().len())
     }
@@ -78,6 +84,37 @@ where
         self.postings_write().clear();
         self.entries.write().expect("entries lock poisoned").clear();
         Ok(())
+    }
+}
+
+impl<K, F, S> crate::index::store::Store<K, S> for IndexStorage<K, F>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+    F: Copy + Eq + Hash + Send + Sync,
+    S: crate::sketch::Sketch<Feature = F>,
+{
+    fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
+        let features: Vec<_> = sketch.iter().collect();
+        if !self.store_entry_features(key.clone(), features.clone()) {
+            return Ok(());
+        }
+        for feature in features {
+            self.insert_posting(feature, key.clone())?;
+        }
+        Ok(())
+    }
+
+    fn remove_entry(&self, key: &K) -> Result<(), IndexError> {
+        if let Some(features) = self.take_entry_features(key) {
+            for feature in features {
+                self.remove_posting(feature, key)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn clear(&self) -> Result<(), IndexError> {
+        self.clear_postings()
     }
 }
 
@@ -124,19 +161,19 @@ mod tests {
     #[test]
     fn entry_features_are_used_for_key_only_removal() {
         let store = Mock::new();
-        store.store_entry_features(42, vec![100, 200]).unwrap();
+        assert!(store.store_entry_features(42, vec![100, 200]));
         store.insert_posting(100, 42).unwrap();
         store.insert_posting(200, 42).unwrap();
 
-        assert_eq!(store.take_entry_features(&42).unwrap(), Some(vec![100, 200]));
-        assert_eq!(store.take_entry_features(&42).unwrap(), None);
+        assert_eq!(store.take_entry_features(&42), Some(vec![100, 200]));
+        assert_eq!(store.take_entry_features(&42), None);
     }
 
     #[test]
     fn duplicate_entry_key_is_ignored() {
         let store = Mock::new();
-        store.store_entry_features(42, vec![100]).unwrap();
-        assert!(!store.store_entry_features(42, vec![200]).unwrap());
+        assert!(store.store_entry_features(42, vec![100]));
+        assert!(!store.store_entry_features(42, vec![200]));
     }
 
     #[test]
