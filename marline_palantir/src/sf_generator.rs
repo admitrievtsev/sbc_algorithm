@@ -1,4 +1,4 @@
-use crate::types::{Chunk, SuperFeatureGenerator};
+use crate::types::{Chunk, SuperFeature, SuperFeatureGenerator};
 use crate::utils::lcm_vec;
 use crate::GEAR;
 use std::hash::{DefaultHasher, Hasher};
@@ -48,6 +48,7 @@ impl PalantirHasher {
     ///   gear-hash fingerprint to trigger feature extraction.
     /// * `tier_list` — Group sizes for each tier (e.g., `vec![4, 3, 2]`).
     pub fn new(sampling_rate: u64, tier_list: Vec<u32>) -> Self {
+        assert!(sampling_rate <= 64);
         let features_num = lcm_vec(&tier_list).unwrap() as usize;
         let mut linear_coefficients = Vec::with_capacity(features_num);
         for _ in 0..features_num {
@@ -97,8 +98,9 @@ impl SuperFeatureGenerator for PalantirHasher {
                 }
             }
         }
-
-        let mut super_features = Vec::new();
+        let capacity =
+            self.tier_list.iter().map(|tier| self.features_num as u32 / tier).sum::<u32>() as usize;
+        let mut super_features: Vec<SuperFeature> = Vec::with_capacity(capacity);
         for (tier_id, &group_size) in self.tier_list.iter().enumerate() {
             let gs = group_size as usize;
             let num_sf = self.features_num / gs;

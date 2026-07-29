@@ -55,7 +55,7 @@ impl<H: ChunkHash + Send + Sync, const N: usize> SFTable<H, N> {
             .collect::<Vec<_>>()
             .try_into()
             .expect("features length must match table tier width N");
-        self.index.put(block_id, U32Sketch::new(vals).unwrap()).expect("index put failed");
+        self.index.put(block_id, U32Sketch::new(vals)).expect("index put failed");
         self.metrics.set_metric(block_id, metric);
     }
 
@@ -84,7 +84,7 @@ impl<H: ChunkHash + Send + Sync, const N: usize> SFTable<H, N> {
     pub fn nearest(&self, features: &[SuperFeature]) -> Option<BlockID<H>> {
         let vals: [u32; N] =
             features.iter().map(SuperFeature::value).collect::<Vec<_>>().try_into().ok()?;
-        let query = U32Sketch::new(vals).ok()?;
+        let query = U32Sketch::new(vals);
         self.index.get(&query).unwrap_or(None)
     }
 
@@ -103,7 +103,7 @@ impl<H: ChunkHash + Send + Sync, const N: usize> SFTable<H, N> {
     ) -> Option<BlockID<H>> {
         let vals: [u32; N] =
             features.iter().map(SuperFeature::value).collect::<Vec<_>>().try_into().ok()?;
-        let query = U32Sketch::new(vals).ok()?;
+        let query = U32Sketch::new(vals);
         let result = self.index.get(&query).unwrap_or(None)?;
         let old = self.metrics.get_metric(&result).unwrap_or(0);
         self.metrics.set_metric(&result, f(old));
