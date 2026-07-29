@@ -20,7 +20,7 @@ struct Config {
 
 fn configs() -> Vec<Config> {
     vec![
-        Config { name: "ODESS",    tier_list: vec![2],      features_num_override: Some(12) },
+        Config { name: "ODESS",    tier_list: vec![4],      features_num_override: Some(12) },
         Config { name: "N2_G3-2",          tier_list: vec![3, 2],   features_num_override: None },
         Config { name: "N3_G4-3-2",        tier_list: vec![4, 3, 2], features_num_override: None },
         Config { name: "N3_G8-4-2",        tier_list: vec![8, 4, 2], features_num_override: None },
@@ -60,7 +60,7 @@ fn run_metrics(
         hasher,
     );
 
-    let chunk_size = SizeParams::new(8192, 32768, 65536);
+    let chunk_size = SizeParams::new(16 * 1024, 32 * 1024, 64 * 1024);
     let original_total: usize = kernel_files.iter().flat_map(|f| f.iter()).map(|d| d.len()).sum();
     let start = Instant::now();
 
@@ -77,8 +77,8 @@ fn run_metrics(
 
     let cdc_ratio = fs.cdc_dedup_ratio();
     fs.scrub().unwrap();
-    let total_ratio = fs.total_dedup_ratio();
     let elapsed = start.elapsed();
+    let total_ratio = fs.total_dedup_ratio();
 
     let stored_mb = (original_total as f64 / total_ratio) / (1024.0 * 1024.0);
     let orig_mb = original_total as f64 / (1024.0 * 1024.0);
@@ -96,9 +96,9 @@ fn run_metrics(
 
 fn main() {
     let kernel_dirs = [
-        "/home/mak/RustroverProjects/marline/linux-3.4.5",
-        "/home/mak/RustroverProjects/marline/linux-3.4.6",
-        "/home/mak/RustroverProjects/marline/linux-3.4.7",
+        "/home/mak/RustroverProjects/marline/linux-3.5.6",
+        "/home/mak/RustroverProjects/marline/linux-3.6.6",
+        "/home/mak/RustroverProjects/marline/linux-3.7.6",
     ];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
