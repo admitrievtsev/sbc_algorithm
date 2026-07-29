@@ -100,9 +100,12 @@ fn run_metrics(
 
 fn main() {
     let kernel_dirs = [
-        "/home/maxllon/pornfolder/marline/linux-3.4.5",
-        "/home/maxllon/pornfolder/marline/linux-3.4.6",
-        "/home/maxllon/pornfolder/marline/linux-3.4.7",
+        "/home/maxllon/pornfolder/marline/linux-3.5.6",
+        "/home/maxllon/pornfolder/marline/linux-3.6.6",
+        "/home/maxllon/pornfolder/marline/linux-3.7.6",
+        "/home/maxllon/pornfolder/marline/linux-4.5.6",
+        "/home/maxllon/pornfolder/marline/linux-4.6.6",
+        "/home/maxllon/pornfolder/marline/linux-4.7.6",
     ];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
