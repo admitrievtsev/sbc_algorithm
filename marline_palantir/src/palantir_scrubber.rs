@@ -12,6 +12,7 @@ use crate::lifecycle_manager::LifecycleTierConfig;
 use crate::metadata_manager::MetadataManager;
 use crate::mock_rocksdb::MockRocksDBMap;
 use crate::types::{BlockID, Chunk, SuperFeatureGenerator, TierConfig};
+use marline_index::heuristic_index::SearchConfig;
 use marline_index::index::IndexError;
 
 /// Core scrubbing pipeline that applies the Palantir method to a storage backend.
@@ -69,10 +70,11 @@ impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: us
         encoder: E,
         tier_config: TierConfig<N>,
         lifecycle_configs: [LifecycleTierConfig; N],
+        search_config: SearchConfig,
     ) -> Self {
         Self {
             sf_gen,
-            metadata_manager: MetadataManager::new(tier_config, lifecycle_configs),
+            metadata_manager: MetadataManager::new(tier_config, lifecycle_configs, &search_config),
             encoder,
             fp_threshold: 0.9,
             chunks_processed: 0,

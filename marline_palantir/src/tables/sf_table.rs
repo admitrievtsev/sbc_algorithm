@@ -1,12 +1,14 @@
 use crate::types::{BlockID, SuperFeature};
 use chunkfs::ChunkHash;
 use marline_index::index::metrics::{Metric, MetricStorage, MetricsMap};
-use marline_index::index::store::{IndexStorage, InvertedStorage};
+use marline_index::index::store::{IndexStorage, InvertedStorage, Store};
+use marline_index::sketch::Sketch;
 use marline_index::index::IndexError;
-use marline_index::index::{InvertedSketchIndex, SketchIndexApi};
+use marline_index::index::{SketchIndexApi};
 use marline_index::sketch::U32Sketch;
 use std::hash::Hash;
 use std::sync::Arc;
+use marline_index::heuristic_index::{HeuristicInvertedSketchIndex, SearchConfig};
 
 struct SharedStore<K, F>(Arc<IndexStorage<K, F>>);
 
@@ -32,17 +34,36 @@ where
     }
 }
 
+impl<K, F, S> Store<K, S> for SharedStore<K, F>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+    F: Copy + Eq + Hash + Send + Sync,
+    S: Sketch<Feature = F>,
+{
+    fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
+        self.0.insert_entry(key, sketch)
+    }
+
+    fn remove_entry(&self, key: &K) -> Result<(), IndexError> {
+        <IndexStorage<K, F> as Store<K, S>>::remove_entry(&self.0, key)
+    }
+
+    fn clear(&self) -> Result<(), IndexError> {
+        <IndexStorage<K, F> as Store<K, S>>::clear(&self.0)
+    }
+}
+
 pub struct SFTable<H: ChunkHash + Send + Sync, const N: usize> {
-    index: InvertedSketchIndex<BlockID<H>, U32Sketch<N>, SharedStore<BlockID<H>, u32>>,
+    index: HeuristicInvertedSketchIndex<BlockID<H>, U32Sketch<N>, SharedStore<BlockID<H>, u32>>,
     store: SharedStore<BlockID<H>, u32>,
     metrics: MetricsMap<BlockID<H>>,
 }
 
 impl<H: ChunkHash + Send + Sync, const N: usize> SFTable<H, N> {
-    pub fn new() -> Self {
+    pub fn new(config: SearchConfig) -> Self {
         let store = SharedStore(Arc::new(IndexStorage::new()));
-        Self {
-            index: InvertedSketchIndex::new(SharedStore(Arc::clone(&store.0))),
+        Self {  
+            index: HeuristicInvertedSketchIndex::with_config(SharedStore(Arc::clone(&store.0)), config),
             store,
             metrics: MetricsMap::new(),
         }

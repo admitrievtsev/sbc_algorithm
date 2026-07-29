@@ -7,6 +7,7 @@ use marline_palantir::lifecycle_manager::LifecycleManager;
 use marline_palantir::metadata_manager::MetadataManager;
 use marline_palantir::mock_rocksdb::MockRocksDBMap;
 use marline_palantir::palantir_scrubber::PalantirScrubber;
+use marline_index::heuristic_index::SearchConfig;
 use marline_palantir::sf_generator::PalantirHasher;
 use marline_palantir::types::{BlockID, Chunk, SuperFeatureGenerator, TierConfig};
 
@@ -19,7 +20,7 @@ fn identical_chunks() {
     let sf_gen = PalantirHasher::new(7, vec![4, 3, 2]);
     let tier_config = TierConfig::new([4, 3, 2]);
     let lifecycle_configs = LifecycleManager::<3>::default_configs();
-    let mut mm = MetadataManager::<[u8; 32], 3>::new(tier_config, lifecycle_configs);
+    let mut mm = MetadataManager::<[u8; 32], 3>::new(tier_config, lifecycle_configs, &SearchConfig::default());
 
     let base: Vec<u8> = b"This is a base chunk for the Palantir similarity pipeline. \
                            It has enough bytes for the gear-hash rolling hash to produce \
@@ -41,7 +42,7 @@ fn similar_chunks() {
     let encoder = GdeltaEncoder;
     let tier_config = TierConfig::new([4, 3, 2]);
     let lifecycle_configs = LifecycleManager::<3>::default_configs();
-    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs);
+    let mut scrubber = PalantirScrubber::new(sf_gen, encoder, tier_config, lifecycle_configs, SearchConfig::default());
 
     let base: Vec<u8> = (0..8192).map(|i| (i % 256) as u8).collect();
     let mut similar = base.clone();
