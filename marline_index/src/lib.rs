@@ -11,10 +11,12 @@
 //!   implementation for representing fixed-size feature sets.
 //! - [`index`]: Contains the [`SketchIndexApi`] trait and the
 //!   [`InvertedSketchIndex`] implementation.
+//! - [`heuristic_index`]: Contains the [`HeuristicInvertedSketchIndex`] with
+//!   heuristic search support.
 //!
 //! # Quick Start
 //!
-//! ```rust,ignore
+//! ```rust
 //! use marline_index::index::store::IndexStorage;
 //! use marline_index::index::{InvertedSketchIndex, SketchIndexApi};
 //! use marline_index::sketch::U32Sketch;
@@ -22,7 +24,7 @@
 //! let storage = IndexStorage::new();
 //! let idx = InvertedSketchIndex::new(storage);
 //!
-//! let sk = U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]).unwrap();
+//! let sk = U32Sketch::<6>::new([1, 2, 3, 4, 5, 6]);
 //! idx.put(&42_u64, sk).unwrap();
 //! ```
 //!
@@ -30,7 +32,9 @@
 //! [`FixedSketch<F, N>`]: sketch::FixedSketch
 //! [`SketchIndexApi`]: index::SketchIndexApi
 //! [`InvertedSketchIndex`]: index::InvertedSketchIndex
+//! [`HeuristicInvertedSketchIndex`]: heuristic_index::HeuristicInvertedSketchIndex
 
+pub mod heuristic_index;
 pub mod index;
 pub mod simple_storage;
 pub mod sketch;

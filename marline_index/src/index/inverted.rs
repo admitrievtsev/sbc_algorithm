@@ -40,7 +40,7 @@ where
     type Error = IndexError;
 
     fn get(&self, query: &S) -> Result<Option<K>, Self::Error> {
-        Ok(self.top_k(query, 1)?.into_iter().next().map(|result| result.0))
+        Ok(self.top_k(query, 1)?.into_iter().next().map(|r| r.0))
     }
 
     fn put(&self, key: &K, sketch: S) -> Result<(), Self::Error> {
@@ -83,7 +83,8 @@ where
     }
 
     fn clear(&self) -> Result<(), Self::Error> {
-        self.store.clear()
+        self.store.clear()?;
+        Ok(())
     }
 }
 
@@ -100,7 +101,7 @@ mod tests {
     }
 
     fn mk(vals: [u32; 6]) -> U32Sketch<6> {
-        U32Sketch::new(vals).unwrap()
+        U32Sketch::new(vals)
     }
 
     #[test]
@@ -108,7 +109,6 @@ mod tests {
         let index = idx();
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.put(&2, mk([1, 2, 3, 7, 8, 9])).unwrap();
-
         assert_eq!(index.get(&mk([1, 2, 3, 4, 11, 12])).unwrap(), Some(1));
     }
 
@@ -125,7 +125,6 @@ mod tests {
         index.put(&1, sketch).unwrap();
 
         let results = index.top_k(&sketch, 5).unwrap();
-
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 1);
         assert!((results[0].1 - 1.0).abs() < 1e-6);
@@ -139,7 +138,6 @@ mod tests {
         index.put(&3, mk([1, 2, 11, 12, 13, 14])).unwrap();
 
         let results = index.top_k(&mk([1, 2, 3, 4, 5, 6]), 3).unwrap();
-
         assert_eq!(results.len(), 3);
         assert!((results[0].1 - 1.0).abs() < 1e-6);
         assert!((results[1].1 - 3.0 / 9.0).abs() < 1e-6);
@@ -151,7 +149,6 @@ mod tests {
         let index = idx();
         let sketch = mk([1, 2, 3, 4, 5, 6]);
         index.put(&42, sketch).unwrap();
-
         assert_eq!(index.top_k(&sketch, 100).unwrap().len(), 1);
     }
 
@@ -159,7 +156,6 @@ mod tests {
     fn top_k_with_zero_k_returns_empty() {
         let index = idx();
         index.put(&42, mk([1, 2, 3, 4, 5, 6])).unwrap();
-
         assert!(index.top_k(&mk([1, 2, 3, 4, 5, 6]), 0).unwrap().is_empty());
     }
 
@@ -174,48 +170,30 @@ mod tests {
         let index = idx();
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.put(&2, mk([7, 8, 9, 10, 11, 12])).unwrap();
-
         let results = index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap();
-
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 1);
-    }
-
-    #[test]
-    fn put_overwrite_removes_old_postings() {
-        let index = idx();
-        index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
-        index.put(&1, mk([10, 11, 12, 13, 14, 15])).unwrap();
-
-        // Old postings are NOT cleaned (no sketches to remove from).
-        // Key 1 still appears for features [1,2,3,4,5,6] AND [10,11,12,13,14,15].
-        // Both queries should find key 1.
-        assert_eq!(index.get(&mk([1, 2, 3, 4, 5, 6])).unwrap(), Some(1));
-        assert_eq!(index.get(&mk([10, 11, 12, 13, 14, 15])).unwrap(), Some(1));
     }
 
     #[test]
     fn repeated_put_same_key_does_not_duplicate_candidates() {
         let index = idx();
         let sketch = mk([1, 2, 3, 4, 5, 6]);
-
         index.put(&1, sketch).unwrap();
         index.put(&1, sketch).unwrap();
-
         let results = index.top_k(&sketch, 10).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 1);
     }
 
     #[test]
-    fn remove_is_noop() {
+    fn remove_deletes_entry() {
         let index = idx();
-        index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
+        let sketch = mk([1, 2, 3, 4, 5, 6]);
+        index.put(&1, sketch).unwrap();
         index.remove(&1).unwrap();
-        // Key 1 still appears (postings are not cleaned).
         let results = index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, 1);
+        assert!(results.is_empty());
     }
 
     #[test]
@@ -223,9 +201,7 @@ mod tests {
         let index = idx();
         index.put(&1, mk([1, 2, 3, 4, 5, 6])).unwrap();
         index.put(&2, mk([7, 8, 9, 10, 11, 12])).unwrap();
-
         index.clear().unwrap();
-
         assert!(index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap().is_empty());
     }
 
@@ -233,10 +209,8 @@ mod tests {
     fn supports_u64_features() {
         let index: InvertedSketchIndex<u64, U64Sketch<3>, IndexStorage<u64, u64>> =
             InvertedSketchIndex::new(IndexStorage::new());
-        let sketch = U64Sketch::<3>::new([10, 20, 30]).unwrap();
-
+        let sketch = U64Sketch::<3>::new([10, 20, 30]);
         index.put(&1, sketch).unwrap();
-
         assert_eq!(index.get(&sketch).unwrap(), Some(1));
     }
 
@@ -255,5 +229,11 @@ mod tests {
         for handle in handles {
             handle.join().unwrap();
         }
+    }
+
+    #[test]
+    fn remove_missing_key_is_noop() {
+        let index = idx();
+        index.remove(&1).unwrap();
     }
 }

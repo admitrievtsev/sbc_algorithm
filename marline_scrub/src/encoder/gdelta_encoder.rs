@@ -181,7 +181,7 @@ pub fn gdelta_diff(new_chunk: &[u8], base_chunk: &[u8]) -> Vec<u8> {
         fp = (fp << move_bts).wrapping_add(GEAR[base_chunk[i] as usize]);
     }
 
-    for i in 0..(base_chunk.len() - word_size + 1) {
+    for i in word_size..(base_chunk.len() - word_size + 1) {
         fp = (fp << move_bts).wrapping_add(GEAR[base_chunk[i + word_size - 1] as usize]);
         let word_hash: u64 = fp >> (64 - mask_bts);
         word_hash_offsets.insert(word_hash, i);

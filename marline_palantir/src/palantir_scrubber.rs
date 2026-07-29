@@ -12,6 +12,7 @@ use crate::lifecycle_manager::LifecycleTierConfig;
 use crate::metadata_manager::MetadataManager;
 use crate::mock_rocksdb::MockRocksDBMap;
 use crate::types::{BlockID, Chunk, SuperFeatureGenerator, TierConfig};
+use marline_index::heuristic_index::SearchConfig;
 use marline_index::index::IndexError;
 
 /// Core scrubbing pipeline that applies the Palantir method to a storage backend.
@@ -64,15 +65,18 @@ impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: us
     /// |-------|-------|
     /// | `fp_threshold` | `0.9` — false-positive ratio cap |
     /// | `chunks_processed` | `0` |
+    /// | `delta_stored` | `0` | number of stored chunks by delta
+    /// | `delta_bases` | empty hashmap | remember of chunk is delta of other chunk
     pub fn new(
         sf_gen: S,
         encoder: E,
         tier_config: TierConfig<N>,
         lifecycle_configs: [LifecycleTierConfig; N],
+        search_config: SearchConfig,
     ) -> Self {
         Self {
             sf_gen,
-            metadata_manager: MetadataManager::new(tier_config, lifecycle_configs),
+            metadata_manager: MetadataManager::new(tier_config, lifecycle_configs, &search_config),
             encoder,
             fp_threshold: 0.9,
             chunks_processed: 0,
@@ -141,34 +145,36 @@ where
                                             let ratio = delta_compressed.len() as f64
                                                 / simple_compressed.len() as f64;
                                             if ratio < self.fp_threshold {
-                                                target_map.insert(hash.clone(), delta_compressed)?;
-                                                self.delta_bases.insert(hash.clone(), base_hash.hash.clone());
+                                                target_map
+                                                    .insert(*hash, delta_compressed)?;
+                                                self.delta_bases
+                                                    .insert(*hash, base_hash.hash);
                                                 self.delta_stored += 1;
                                             } else {
                                                 target_map
-                                                    .insert(hash.clone(), chunk_data.clone())?;
+                                                    .insert(*hash, chunk_data.clone())?;
                                             }
                                         }
                                         Err(_) => {
-                                            target_map.insert(hash.clone(), chunk_data.clone())?;
+                                            target_map.insert(*hash, chunk_data.clone())?;
                                         }
                                     }
                                     processed_data += chunk_data.len();
                                 }
                                 None => {
-                                    target_map.insert(hash.clone(), chunk_data.clone())?;
+                                    target_map.insert(*hash, chunk_data.clone())?;
                                     processed_data += chunk_data.len();
                                 }
                             }
 
                             self.metadata_manager.add_block(
-                                hash.clone(),
+                                *hash,
                                 &super_features,
-                                BlockID::new(hash.clone()),
+                                BlockID::new(*hash),
                             );
                         }
                     }
-                    container.make_target(vec![hash.clone()]);
+                    container.make_target(vec![*hash]);
                     self.chunks_processed += 1;
                 }
                 Data::TargetChunk(_) => {}

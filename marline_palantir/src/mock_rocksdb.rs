@@ -46,6 +46,12 @@ impl IterableDatabase<[u8; 32], Vec<u8>> for MockRocksDBMap {
     }
 }
 
+impl Default for MockRocksDBMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockRocksDBMap {
     pub fn new() -> Self {
         Self {

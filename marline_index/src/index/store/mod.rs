@@ -34,29 +34,14 @@ where
     K: Clone + Send + Sync,
     S: Sketch,
 {
-    /// Inserts an entry: stores each feature→key in the posting lists.
-    fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
-        for f in sketch.iter() {
-            self.insert_posting(f, key.clone())?;
-        }
-        Ok(())
-    }
+    /// Inserts an entry. Existing keys are not updated.
+    fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError>;
 
-    /// No-op — sketches are not stored, so old postings cannot be cleaned.
-    fn remove_entry(&self, _key: &K) -> Result<(), IndexError> {
-        Ok(())
-    }
+    /// Removes an entry from all posting lists using only its key.
+    fn remove_entry(&self, key: &K) -> Result<(), IndexError>;
 
     /// Removes all entries from the storage.
     fn clear(&self) -> Result<(), IndexError> {
         self.clear_postings()
     }
-}
-
-impl<K, S, T> Store<K, S> for T
-where
-    K: Clone + Send + Sync,
-    S: Sketch,
-    T: InvertedStorage<K, S::Feature>,
-{
 }

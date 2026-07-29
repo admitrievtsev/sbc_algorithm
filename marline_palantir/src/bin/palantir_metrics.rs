@@ -5,12 +5,23 @@ use std::time::Instant;
 use chunkfs::chunkers::{FastChunker, SizeParams};
 use chunkfs::hashers::Sha256Hasher;
 use chunkfs::{DataContainer, FileSystem};
+use marline_index::heuristic_index::SearchConfig;
 use marline_palantir::encoder::GdeltaEncoder;
 use marline_palantir::lifecycle_manager::LifecycleManager;
 use marline_palantir::mock_rocksdb::MockRocksDBMap;
 use marline_palantir::palantir_scrubber::PalantirScrubber;
 use marline_palantir::sf_generator::PalantirHasher;
 use marline_palantir::types::TierConfig;
+
+fn fmt_sc(sc: &SearchConfig) -> String {
+    format!(
+        "mj={:.2} df={} rf={} fp={}",
+        sc.min_jaccard.unwrap_or(-1.0),
+        sc.max_df.map_or(-1, |v| v as i32),
+        if sc.rare_first { 1 } else { 0 },
+        sc.fp_metric_threshold.map_or(-1, |v| v as i32),
+    )
+}
 
 struct Config {
     name: &'static str,
@@ -20,13 +31,42 @@ struct Config {
 
 fn configs() -> Vec<Config> {
     vec![
-        Config { name: "ODESS",    tier_list: vec![2],      features_num_override: Some(12) },
-        Config { name: "N2_G3-2",          tier_list: vec![3, 2],   features_num_override: None },
-        Config { name: "N3_G4-3-2",        tier_list: vec![4, 3, 2], features_num_override: None },
-        Config { name: "N3_G8-4-2",        tier_list: vec![8, 4, 2], features_num_override: None },
-        Config { name: "N4_G6-4-3-2",      tier_list: vec![6, 4, 3, 2], features_num_override: None },
-        Config { name: "N5_G12-6-4-3-2",   tier_list: vec![12, 6, 4, 3, 2], features_num_override: None },
+        Config { name: "ODESS", tier_list: vec![4], features_num_override: Some(12) },
+        Config { name: "N2_G3-2", tier_list: vec![3, 2], features_num_override: None },
+        Config { name: "N3_G4-3-2", tier_list: vec![4, 3, 2], features_num_override: None },
+        Config { name: "N3_G8-4-2", tier_list: vec![8, 4, 2], features_num_override: None },
+        Config { name: "N4_G6-4-3-2", tier_list: vec![6, 4, 3, 2], features_num_override: None },
+        Config {
+            name: "N5_G12-6-4-3-2",
+            tier_list: vec![12, 6, 4, 3, 2],
+            features_num_override: None,
+        },
     ]
+}
+
+fn search_config_grid() -> Vec<SearchConfig> {
+    // your heuristics
+    let min_jaccard = [];
+    let max_df = [];
+    let rare_first = [];
+    let fp_threshold = [];
+
+    let mut configs = vec![SearchConfig::default()];
+    for &mj in &min_jaccard {
+        for &md in &max_df {
+            for &rf in &rare_first {
+                for &fp in &fp_threshold {
+                    configs.push(SearchConfig {
+                        min_jaccard: Some(mj),
+                        max_df: md,
+                        rare_first: rf,
+                        fp_metric_threshold: fp,
+                    });
+                }
+            }
+        }
+    }
+    configs
 }
 
 fn collect_files(dir: &Path, files: &mut Vec<Vec<u8>>) {
@@ -46,19 +86,19 @@ fn collect_files(dir: &Path, files: &mut Vec<Vec<u8>>) {
 
 fn run_metrics(
     name: &str,
-    scrubber: impl chunkfs::Scrub<[u8; 32], HashMap<[u8; 32], DataContainer<[u8; 32]>>, [u8; 32], MockRocksDBMap> + 'static,
+    scrubber: impl chunkfs::Scrub<
+            [u8; 32],
+            HashMap<[u8; 32], DataContainer<[u8; 32]>>,
+            [u8; 32],
+            MockRocksDBMap,
+        > + 'static,
     kernel_files: &[Vec<Vec<u8>>],
 ) {
     let database: HashMap<[u8; 32], DataContainer<[u8; 32]>> = HashMap::default();
     let target_map = MockRocksDBMap::new();
     let hasher = Sha256Hasher::default();
 
-    let mut fs = FileSystem::new_with_scrubber(
-        database,
-        target_map,
-        Box::new(scrubber),
-        hasher,
-    );
+    let mut fs = FileSystem::new_with_scrubber(database, target_map, Box::new(scrubber), hasher);
 
     let chunk_size = SizeParams::new(8192, 32768, 65536);
     let original_total: usize = kernel_files.iter().flat_map(|f| f.iter()).map(|d| d.len()).sum();
@@ -95,83 +135,104 @@ fn run_metrics(
 }
 
 fn main() {
-    let kernel_dirs = [
-        "/home/mak/RustroverProjects/marline/linux-3.4.5",
-        "/home/mak/RustroverProjects/marline/linux-3.4.6",
-        "/home/mak/RustroverProjects/marline/linux-3.4.7",
-    ];
+    // example data
+    let kernel_dirs = ["your/path/to/data", "your/path/to/data2", "your/path/to/data3"];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
     for dir in &kernel_dirs {
         let mut files = Vec::new();
         collect_files(Path::new(dir), &mut files);
-        eprintln!("  {}: {} files, {:.2} MB", dir, files.len(), files.iter().map(|d| d.len()).sum::<usize>() as f64 / (1024.0 * 1024.0));
+        eprintln!(
+            "  {}: {} files, {:.2} MB",
+            dir,
+            files.len(),
+            files.iter().map(|d| d.len()).sum::<usize>() as f64 / (1024.0 * 1024.0)
+        );
         kernel_files.push(files);
     }
 
     println!(
-        "{:<20} {:<12} {:<21} {:<21} {:<21} {:<17} {:<12}",
-        "config", "cdc_ratio", "total_dedup_ratio", "stored_mb", "orig_mb", "elapsed_s", "mbps"
+        "{:<20} {:<30} {:<12} {:<21} {:<21} {:<21} {:<12}",
+        "tier", "search_cfg", "cdc_ratio", "total_dedup", "stored_mb", "orig_mb", "mbps"
     );
 
     for cfg in configs() {
-        let sf_gen = if let Some(fn_val) = cfg.features_num_override {
-            PalantirHasher::with_features_num(7, cfg.tier_list.clone(), fn_val)
-        } else {
-            PalantirHasher::new(7, cfg.tier_list.clone())
-        };
+        for sc in search_config_grid() {
+            let sf_gen = if let Some(fn_val) = cfg.features_num_override {
+                PalantirHasher::with_features_num(7, cfg.tier_list.clone(), fn_val)
+            } else {
+                PalantirHasher::new(7, cfg.tier_list.clone())
+            };
 
-        match cfg.tier_list.len() {
-            1 => {
-                let arr: [u32; 1] = cfg.tier_list.as_slice().try_into().unwrap();
-                let tier_config = if let Some(fn_val) = cfg.features_num_override {
-                    TierConfig::with_features_num(arr, fn_val)
-                } else {
-                    TierConfig::new(arr)
-                };
-                let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
-                    LifecycleManager::<1>::default_configs(),
-                );
-                run_metrics(cfg.name, scrubber, &kernel_files);
+            let name = format!("{} | {}", cfg.name, fmt_sc(&sc));
+
+            match cfg.tier_list.len() {
+                1 => {
+                    let arr: [u32; 1] = cfg.tier_list.as_slice().try_into().unwrap();
+                    let tier_config = if let Some(fn_val) = cfg.features_num_override {
+                        TierConfig::with_features_num(arr, fn_val)
+                    } else {
+                        TierConfig::new(arr)
+                    };
+                    let scrubber = PalantirScrubber::new(
+                        sf_gen,
+                        GdeltaEncoder,
+                        tier_config,
+                        LifecycleManager::<1>::default_configs(),
+                        sc,
+                    );
+                    run_metrics(&name, scrubber, &kernel_files);
+                }
+                2 => {
+                    let arr: [u32; 2] = cfg.tier_list.as_slice().try_into().unwrap();
+                    let tier_config = TierConfig::new(arr);
+                    let scrubber = PalantirScrubber::new(
+                        sf_gen,
+                        GdeltaEncoder,
+                        tier_config,
+                        LifecycleManager::<2>::default_configs(),
+                        sc,
+                    );
+                    run_metrics(&name, scrubber, &kernel_files);
+                }
+                3 => {
+                    let arr: [u32; 3] = cfg.tier_list.as_slice().try_into().unwrap();
+                    let tier_config = TierConfig::new(arr);
+                    let scrubber = PalantirScrubber::new(
+                        sf_gen,
+                        GdeltaEncoder,
+                        tier_config,
+                        LifecycleManager::<3>::default_configs(),
+                        sc,
+                    );
+                    run_metrics(&name, scrubber, &kernel_files);
+                }
+                4 => {
+                    let arr: [u32; 4] = cfg.tier_list.as_slice().try_into().unwrap();
+                    let tier_config = TierConfig::new(arr);
+                    let scrubber = PalantirScrubber::new(
+                        sf_gen,
+                        GdeltaEncoder,
+                        tier_config,
+                        LifecycleManager::<4>::default_configs(),
+                        sc,
+                    );
+                    run_metrics(&name, scrubber, &kernel_files);
+                }
+                5 => {
+                    let arr: [u32; 5] = cfg.tier_list.as_slice().try_into().unwrap();
+                    let tier_config = TierConfig::new(arr);
+                    let scrubber = PalantirScrubber::new(
+                        sf_gen,
+                        GdeltaEncoder,
+                        tier_config,
+                        LifecycleManager::<5>::default_configs(),
+                        sc,
+                    );
+                    run_metrics(&name, scrubber, &kernel_files);
+                }
+                _ => unreachable!(),
             }
-            2 => {
-                let arr: [u32; 2] = cfg.tier_list.as_slice().try_into().unwrap();
-                let tier_config = TierConfig::new(arr);
-                let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
-                    LifecycleManager::<2>::default_configs(),
-                );
-                run_metrics(cfg.name, scrubber, &kernel_files);
-            }
-            3 => {
-                let arr: [u32; 3] = cfg.tier_list.as_slice().try_into().unwrap();
-                let tier_config = TierConfig::new(arr);
-                let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
-                    LifecycleManager::<3>::default_configs(),
-                );
-                run_metrics(cfg.name, scrubber, &kernel_files);
-            }
-            4 => {
-                let arr: [u32; 4] = cfg.tier_list.as_slice().try_into().unwrap();
-                let tier_config = TierConfig::new(arr);
-                let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
-                    LifecycleManager::<4>::default_configs(),
-                );
-                run_metrics(cfg.name, scrubber, &kernel_files);
-            }
-            5 => {
-                let arr: [u32; 5] = cfg.tier_list.as_slice().try_into().unwrap();
-                let tier_config = TierConfig::new(arr);
-                let scrubber = PalantirScrubber::new(
-                    sf_gen, GdeltaEncoder, tier_config,
-                    LifecycleManager::<5>::default_configs(),
-                );
-                run_metrics(cfg.name, scrubber, &kernel_files);
-            }
-            _ => unreachable!(),
         }
     }
 }

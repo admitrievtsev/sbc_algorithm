@@ -1,17 +1,18 @@
 use crate::index::error::IndexError;
 use crate::index::store::InvertedStorage;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// In-memory posting-list storage backed by `RwLock`-protected maps.
 pub struct IndexStorage<K, F> {
     postings: RwLock<HashMap<F, HashSet<K>>>,
+    entries: RwLock<HashMap<K, Vec<F>>>,
 }
 
 impl<K, F> IndexStorage<K, F> {
     pub fn new() -> Self {
-        Self { postings: RwLock::new(HashMap::new()) }
+        Self { postings: RwLock::new(HashMap::new()), entries: RwLock::new(HashMap::new()) }
     }
 
     fn postings_read(&self) -> RwLockReadGuard<'_, HashMap<F, HashSet<K>>> {
@@ -20,6 +21,26 @@ impl<K, F> IndexStorage<K, F> {
 
     fn postings_write(&self) -> RwLockWriteGuard<'_, HashMap<F, HashSet<K>>> {
         self.postings.write().expect("postings lock poisoned")
+    }
+
+    fn store_entry_features(&self, key: K, features: Vec<F>) -> bool
+    where
+        K: Eq + Hash,
+    {
+        match self.entries.write().expect("entries lock poisoned").entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(features);
+                true
+            }
+            Entry::Occupied(_) => false,
+        }
+    }
+
+    fn take_entry_features(&self, key: &K) -> Option<Vec<F>>
+    where
+        K: Eq + Hash,
+    {
+        self.entries.write().expect("entries lock poisoned").remove(key)
     }
 }
 
@@ -61,7 +82,39 @@ where
 
     fn clear_postings(&self) -> Result<(), IndexError> {
         self.postings_write().clear();
+        self.entries.write().expect("entries lock poisoned").clear();
         Ok(())
+    }
+}
+
+impl<K, F, S> crate::index::store::Store<K, S> for IndexStorage<K, F>
+where
+    K: Clone + Eq + Hash + Send + Sync,
+    F: Copy + Eq + Hash + Send + Sync,
+    S: crate::sketch::Sketch<Feature = F>,
+{
+    fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
+        let features: Vec<_> = sketch.iter().collect();
+        if !self.store_entry_features(key.clone(), features.clone()) {
+            return Ok(());
+        }
+        for feature in features {
+            self.insert_posting(feature, key.clone())?;
+        }
+        Ok(())
+    }
+
+    fn remove_entry(&self, key: &K) -> Result<(), IndexError> {
+        if let Some(features) = self.take_entry_features(key) {
+            for feature in features {
+                self.remove_posting(feature, key)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn clear(&self) -> Result<(), IndexError> {
+        self.clear_postings()
     }
 }
 
@@ -74,20 +127,16 @@ mod tests {
     #[test]
     fn insert_posting_is_idempotent() {
         let store = Mock::new();
-
         store.insert_posting(100, 42).unwrap();
         store.insert_posting(100, 42).unwrap();
-
         assert_eq!(store.posting_list(100).unwrap(), vec![42]);
     }
 
     #[test]
     fn posting_lists_are_independent_by_feature() {
         let store = Mock::new();
-
         store.insert_posting(100, 1).unwrap();
         store.insert_posting(200, 2).unwrap();
-
         assert_eq!(store.posting_list(100).unwrap(), vec![1]);
         assert_eq!(store.posting_list(200).unwrap(), vec![2]);
     }
@@ -95,10 +144,8 @@ mod tests {
     #[test]
     fn remove_posting_removes_empty_feature_bucket() {
         let store = Mock::new();
-
         store.insert_posting(100, 1).unwrap();
         store.remove_posting(100, &1).unwrap();
-
         assert!(store.posting_list(100).unwrap().is_empty());
         assert_eq!(store.len_postings().unwrap(), 0);
     }
@@ -106,11 +153,27 @@ mod tests {
     #[test]
     fn clear_removes_all_postings() {
         let store = Mock::new();
-
         store.insert_posting(1, 1).unwrap();
         store.clear_postings().unwrap();
-
         assert_eq!(store.len_postings().unwrap(), 0);
+    }
+
+    #[test]
+    fn entry_features_are_used_for_key_only_removal() {
+        let store = Mock::new();
+        assert!(store.store_entry_features(42, vec![100, 200]));
+        store.insert_posting(100, 42).unwrap();
+        store.insert_posting(200, 42).unwrap();
+
+        assert_eq!(store.take_entry_features(&42), Some(vec![100, 200]));
+        assert_eq!(store.take_entry_features(&42), None);
+    }
+
+    #[test]
+    fn duplicate_entry_key_is_ignored() {
+        let store = Mock::new();
+        assert!(store.store_entry_features(42, vec![100]));
+        assert!(!store.store_entry_features(42, vec![200]));
     }
 
     #[test]
@@ -118,7 +181,6 @@ mod tests {
         use std::thread;
 
         let store = Mock::new();
-
         store.insert_posting(100, 1).unwrap();
 
         let store = std::sync::Arc::new(store);

@@ -3,6 +3,7 @@ use crate::tables::{FPTable, SFTable};
 use crate::types::{BlockID, SuperFeature, TierConfig};
 use crate::utils::lcm_vec;
 use chunkfs::ChunkHash;
+use marline_index::heuristic_index::SearchConfig;
 use marline_index::index::metrics::Metric;
 use marline_index::index::IndexError;
 
@@ -20,7 +21,11 @@ pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
 }
 
 impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
-    pub fn new(tier_config: TierConfig<N>, lifecycle_configs: [LifecycleTierConfig; N]) -> Self {
+    pub fn new(
+        tier_config: TierConfig<N>,
+        lifecycle_configs: [LifecycleTierConfig; N],
+        search_config: &SearchConfig,
+    ) -> Self {
         let features_num = if let Some(fn_val) = tier_config.features_num {
             fn_val
         } else {
@@ -29,7 +34,7 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
         let sf_counts: [usize; N] =
             std::array::from_fn(|i| features_num / tier_config.tier_list[i] as usize);
         let sf_tables: [AnySFTable<H>; N] = std::array::from_fn(|i| {
-            AnySFTable::from_index(sf_counts[i] as u32).expect("Invalid tier index")
+            AnySFTable::from_index(sf_counts[i] as u32, search_config).expect("Invalid tier index")
         });
         Self {
             fp_table: FPTable::<H>::new(),
@@ -107,9 +112,13 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
     }
 }
 
-impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
-    pub fn default() -> Self {
-        Self::new(TierConfig::new([4, 3, 2]), <LifecycleManager<3>>::default_configs())
+impl<H: ChunkHash + Send + Sync> Default for MetadataManager<H, 3> {
+    fn default() -> Self {
+        Self::new(
+            TierConfig::new([4, 3, 2]),
+            <LifecycleManager<3>>::default_configs(),
+            &SearchConfig::default(),
+        )
     }
 }
 
@@ -148,20 +157,20 @@ pub enum AnySFTable<H: ChunkHash + Send + Sync> {
 }
 
 impl<H: ChunkHash + Send + Sync> AnySFTable<H> {
-    pub fn from_index(index: u32) -> Option<Self> {
+    pub fn from_index(index: u32, config: &SearchConfig) -> Option<Self> {
         match index {
-            1 => Some(Self::T1(SFTable::new())),
-            2 => Some(Self::T2(SFTable::new())),
-            3 => Some(Self::T3(SFTable::new())),
-            4 => Some(Self::T4(SFTable::new())),
-            5 => Some(Self::T5(SFTable::new())),
-            6 => Some(Self::T6(SFTable::new())),
-            7 => Some(Self::T7(SFTable::new())),
-            8 => Some(Self::T8(SFTable::new())),
-            9 => Some(Self::T9(SFTable::new())),
-            10 => Some(Self::T10(SFTable::new())),
-            11 => Some(Self::T11(SFTable::new())),
-            12 => Some(Self::T12(SFTable::new())),
+            1 => Some(Self::T1(SFTable::new(config.clone()))),
+            2 => Some(Self::T2(SFTable::new(config.clone()))),
+            3 => Some(Self::T3(SFTable::new(config.clone()))),
+            4 => Some(Self::T4(SFTable::new(config.clone()))),
+            5 => Some(Self::T5(SFTable::new(config.clone()))),
+            6 => Some(Self::T6(SFTable::new(config.clone()))),
+            7 => Some(Self::T7(SFTable::new(config.clone()))),
+            8 => Some(Self::T8(SFTable::new(config.clone()))),
+            9 => Some(Self::T9(SFTable::new(config.clone()))),
+            10 => Some(Self::T10(SFTable::new(config.clone()))),
+            11 => Some(Self::T11(SFTable::new(config.clone()))),
+            12 => Some(Self::T12(SFTable::new(config.clone()))),
             _ => None,
         }
     }
