@@ -13,9 +13,9 @@ bzip2 = "0.5"
 tar = "0.4"
 
 [[bench]]
-name = "top_k"
+name = "throughput"
 harness = false
 
 [[bench]]
-name = "throughput"
+name = "heuristic_matrix"
 harness = false
