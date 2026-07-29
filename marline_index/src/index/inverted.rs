@@ -48,8 +48,8 @@ where
         Ok(())
     }
 
-    fn remove(&self, key: &K, sketch: &S) -> Result<(), Self::Error> {
-        self.store.remove_entry(key, sketch)?;
+    fn remove(&self, key: &K) -> Result<(), Self::Error> {
+        self.store.remove_entry(key)?;
         Ok(())
     }
 
@@ -191,7 +191,7 @@ mod tests {
         let index = idx();
         let sketch = mk([1, 2, 3, 4, 5, 6]);
         index.put(&1, sketch).unwrap();
-        index.remove(&1, &mk([1, 2, 3, 4, 5, 6])).unwrap();
+        index.remove(&1).unwrap();
         let results = index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap();
         assert!(results.is_empty());
     }
@@ -234,6 +234,6 @@ mod tests {
     #[test]
     fn remove_missing_key_is_noop() {
         let index = idx();
-        index.remove(&1, &mk([1, 2, 3, 4, 5, 6])).unwrap();
+        index.remove(&1).unwrap();
     }
 }

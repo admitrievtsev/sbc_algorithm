@@ -150,8 +150,8 @@ where
         Ok(())
     }
 
-    fn remove(&self, key: &K, sketch: &S) -> Result<(), Self::Error> {
-        self.store.remove_entry(key, sketch)?;
+    fn remove(&self, key: &K) -> Result<(), Self::Error> {
+        self.store.remove_entry(key)?;
         self.metrics.remove_metric(key);
         Ok(())
     }
@@ -317,7 +317,7 @@ mod tests {
         index.record_false_positive(&1);
         assert_eq!(index.get_metric(&1), Some(1));
 
-        index.remove(&1, &mk([1, 2, 3, 4, 5, 6])).unwrap();
+        index.remove(&1).unwrap();
         assert_eq!(index.get_metric(&1), None);
         assert!(index.top_k(&mk([1, 2, 3, 4, 5, 6]), 5).unwrap().is_empty());
     }

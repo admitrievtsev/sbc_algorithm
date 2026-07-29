@@ -1,17 +1,18 @@
 use crate::index::error::IndexError;
 use crate::index::store::InvertedStorage;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// In-memory posting-list storage backed by `RwLock`-protected maps.
 pub struct IndexStorage<K, F> {
     postings: RwLock<HashMap<F, HashSet<K>>>,
+    entries: RwLock<HashMap<K, Vec<F>>>,
 }
 
 impl<K, F> IndexStorage<K, F> {
     pub fn new() -> Self {
-        Self { postings: RwLock::new(HashMap::new()) }
+        Self { postings: RwLock::new(HashMap::new()), entries: RwLock::new(HashMap::new()) }
     }
 
     fn postings_read(&self) -> RwLockReadGuard<'_, HashMap<F, HashSet<K>>> {
@@ -55,12 +56,27 @@ where
         Ok(())
     }
 
+    fn store_entry_features(&self, key: K, features: Vec<F>) -> Result<bool, IndexError> {
+        match self.entries.write().expect("entries lock poisoned").entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(features);
+                Ok(true)
+            }
+            Entry::Occupied(_) => Ok(false),
+        }
+    }
+
+    fn take_entry_features(&self, key: &K) -> Result<Option<Vec<F>>, IndexError> {
+        Ok(self.entries.write().expect("entries lock poisoned").remove(key))
+    }
+
     fn len_postings(&self) -> Result<usize, IndexError> {
         Ok(self.postings_read().len())
     }
 
     fn clear_postings(&self) -> Result<(), IndexError> {
         self.postings_write().clear();
+        self.entries.write().expect("entries lock poisoned").clear();
         Ok(())
     }
 }
@@ -103,6 +119,24 @@ mod tests {
         store.insert_posting(1, 1).unwrap();
         store.clear_postings().unwrap();
         assert_eq!(store.len_postings().unwrap(), 0);
+    }
+
+    #[test]
+    fn entry_features_are_used_for_key_only_removal() {
+        let store = Mock::new();
+        store.store_entry_features(42, vec![100, 200]).unwrap();
+        store.insert_posting(100, 42).unwrap();
+        store.insert_posting(200, 42).unwrap();
+
+        assert_eq!(store.take_entry_features(&42).unwrap(), Some(vec![100, 200]));
+        assert_eq!(store.take_entry_features(&42).unwrap(), None);
+    }
+
+    #[test]
+    fn duplicate_entry_key_is_ignored() {
+        let store = Mock::new();
+        store.store_entry_features(42, vec![100]).unwrap();
+        assert!(!store.store_entry_features(42, vec![200]).unwrap());
     }
 
     #[test]

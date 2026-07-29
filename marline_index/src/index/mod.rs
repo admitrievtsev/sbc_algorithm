@@ -32,11 +32,11 @@ where
     /// Search: finds the closest matching key for a query sketch.
     fn get(&self, query: &S) -> Result<Option<K>, Self::Error>;
 
-    /// Inserts or updates an entry.
+    /// Inserts an entry. Existing keys are not updated.
     fn put(&self, key: &K, sketch: S) -> Result<(), Self::Error>;
 
     /// Removes the entry associated with the given key.
-    fn remove(&self, key: &K, sketch: &S) -> Result<(), Self::Error>;
+    fn remove(&self, key: &K) -> Result<(), Self::Error>;
 
     /// Returns the top `k` entries most similar to the query sketch.
     fn top_k(&self, query: &S, k: usize) -> Result<Vec<(K, f64)>, Self::Error>;

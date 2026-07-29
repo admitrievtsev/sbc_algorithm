@@ -21,6 +21,12 @@ where
     /// Removes the key from the feature's posting list.
     fn remove_posting(&self, feature: F, key: &K) -> Result<(), IndexError>;
 
+    /// Records the features belonging to a key for key-only removal.
+    fn store_entry_features(&self, key: K, features: Vec<F>) -> Result<bool, IndexError>;
+
+    /// Takes and removes the features belonging to a key.
+    fn take_entry_features(&self, key: &K) -> Result<Option<Vec<F>>, IndexError>;
+
     /// Returns the number of distinct indexed features.
     fn len_postings(&self) -> Result<usize, IndexError>;
 
@@ -34,18 +40,25 @@ where
     K: Clone + Send + Sync,
     S: Sketch,
 {
-    /// Inserts an entry: stores each feature→key in the posting lists.
+    /// Inserts an entry: records its features and stores each feature→key in
+    /// the posting lists. Existing keys are not updated.
     fn insert_entry(&self, key: K, sketch: S) -> Result<(), IndexError> {
-        for f in sketch.iter() {
+        let features: Vec<_> = sketch.iter().collect();
+        if !self.store_entry_features(key.clone(), features.iter().copied().collect())? {
+            return Ok(());
+        }
+        for f in features {
             self.insert_posting(f, key.clone())?;
         }
         Ok(())
     }
 
-    /// Removes an entry from all posting lists.
-    fn remove_entry(&self, key: &K, sketch: &S) -> Result<(), IndexError> {
-        for f in sketch.iter() {
-            self.remove_posting(f, key)?;
+    /// Removes an entry from all posting lists using only its key.
+    fn remove_entry(&self, key: &K) -> Result<(), IndexError> {
+        if let Some(features) = self.take_entry_features(key)? {
+            for f in features {
+                self.remove_posting(f, key)?;
+            }
         }
         Ok(())
     }
