@@ -39,8 +39,6 @@ pub struct PalantirScrubber<
     encoder: E,
     /// False-positive threshold for delta encoding ratio.
     fp_threshold: f64,
-    /// Running average compression ratio.
-    avg_comp_ratio: f64,
     /// Total chunks processed.
     chunks_processed: u64,
     /// Count of chunks stored as deltas.
@@ -78,7 +76,7 @@ impl<S, H: ChunkHash + Clone + Eq + Hash + Send + Sync + 'static, E, const N: us
             metadata_manager: MetadataManager::new(tier_config, lifecycle_configs),
             encoder,
             fp_threshold: 0.9,
-            avg_comp_ratio: 1.0,
+            // avg_comp_ratio: 1.0,
             chunks_processed: 0,
             delta_stored: 0,
             delta_bases: HashMap::new(),
@@ -135,7 +133,7 @@ where
                         None => {
                             match self.metadata_manager.lookup_super_features(&super_features) {
                                 Some((base_hash, _)) => {
-                                    match reconstruct(target_map, &self.delta_bases, &base_hash.hash) {
+                                    match decoder(target_map, &self.delta_bases, &base_hash.hash) {
                                         Ok(base_data) => {
                                             let delta = self.encoder.encode(chunk_data, &base_data);
                                             let delta_compressed =
@@ -145,12 +143,12 @@ where
                                             let ratio = delta_compressed.len() as f64
                                                 / simple_compressed.len() as f64;
 
-                                            if ratio < self.fp_threshold * self.avg_comp_ratio {
+                                            if ratio < self.fp_threshold {
                                                 target_map.insert(hash.clone(), delta_compressed)?;
                                                 self.delta_bases.insert(hash.clone(), base_hash.hash.clone());
                                                 self.delta_stored += 1;
-                                                self.avg_comp_ratio =
-                                                    self.avg_comp_ratio * 0.95 + ratio * 0.05;
+                                                // self.avg_comp_ratio =
+                                                //     self.avg_comp_ratio * 0.95 + ratio * 0.05;
                                             } else {
                                                 target_map
                                                     .insert(hash.clone(), chunk_data.clone())?;
@@ -191,7 +189,7 @@ where
     }
 }
 
-fn reconstruct(
+fn decoder(
     target_map: &MockRocksDBMap,
     delta_bases: &HashMap<[u8; 32], [u8; 32]>,
     hash: &[u8; 32],

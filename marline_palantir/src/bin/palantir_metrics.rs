@@ -182,7 +182,7 @@ fn run_metrics(
     let stored_total = target.total_bytes() as u64;
     let chunks_total = target.len();
     let dedup_ratio = if original_total > 0 {
-        stored_total as f64 / original_total as f64
+        original_total as f64 / stored_total as f64
     } else {
         1.0
     };
@@ -211,7 +211,7 @@ fn main() {
     let kernel_dirs = [
         "/home/mak/RustroverProjects/marline/linux-3.4.5",
         "/home/mak/RustroverProjects/marline/linux-3.4.6",
-        "/home/mak/RustroverProjects/marline/linux-3.4.7",
+        // "/home/mak/RustroverProjects/marline/linux-3.4.7",
     ];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
