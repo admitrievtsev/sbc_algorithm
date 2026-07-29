@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use chunkfs::chunkers::{FastChunker, SizeParams};
 use chunkfs::hashers::Sha256Hasher;
-use chunkfs::{DataContainer, FileSystem};
+use chunkfs::{Chunker, DataContainer, FileSystem, Hasher};
 use marline_palantir::encoder::GdeltaEncoder;
 use marline_palantir::lifecycle_manager::LifecycleManager;
 use marline_palantir::mock_rocksdb::MockRocksDBMap;
@@ -21,7 +21,7 @@ struct Config {
 fn configs() -> Vec<Config> {
     vec![
         Config { name: "N1_G2",            tier_list: vec![2],      features_num_override: None },
-        Config { name: "N1_odess_like",    tier_list: vec![2],      features_num_override: Some(12) },
+        Config { name: "ODESS",    tier_list: vec![6],      features_num_override: Some(12) },
         Config { name: "N2_G3-2",          tier_list: vec![3, 2],   features_num_override: None },
         Config { name: "N3_G4-3-2",        tier_list: vec![4, 3, 2], features_num_override: None },
         Config { name: "N3_G8-4-2",        tier_list: vec![8, 4, 2], features_num_override: None },
@@ -45,10 +45,26 @@ fn collect_files(dir: &Path, files: &mut Vec<Vec<u8>>) {
     }
 }
 
+fn track_cdc_chunks(
+    data: &[u8],
+    chunk_size: SizeParams,
+    cdc_sizes: &mut HashMap<[u8; 32], usize>,
+    hasher: &mut Sha256Hasher,
+) {
+    let mut chunker = FastChunker::new(chunk_size);
+    let chunks = chunker.chunk_data(data, Vec::new());
+    for c in &chunks {
+        let chunk_data = &data[c.offset()..c.offset() + c.length()];
+        let hash = hasher.hash(chunk_data);
+        cdc_sizes.entry(hash).or_insert(c.length());
+    }
+}
+
 fn run_metrics(
     name: &str,
     scrubber: impl chunkfs::Scrub<[u8; 32], HashMap<[u8; 32], DataContainer<[u8; 32]>>, [u8; 32], MockRocksDBMap> + 'static,
     kernel_files: &[Vec<Vec<u8>>],
+    kernel_labels: &[&str],
 ) {
     let database: HashMap<[u8; 32], DataContainer<[u8; 32]>> = HashMap::default();
     let target_map = MockRocksDBMap::new();
@@ -62,37 +78,48 @@ fn run_metrics(
     );
 
     let chunk_size = SizeParams::new(8192, 32768, 65536);
-    let original_total: usize = kernel_files.iter().flat_map(|f| f.iter()).map(|d| d.len()).sum();
-    let start = Instant::now();
-
+    let mut original_total = 0u64;
+    let total_start = Instant::now();
     let mut file_id = 0u64;
-    for files in kernel_files {
+    let mut cdc_sizes: HashMap<[u8; 32], usize> = HashMap::new();
+
+    for (idx, files) in kernel_files.iter().enumerate() {
+        let kernel_orig: usize = files.iter().map(|d| d.len()).sum();
+        original_total += kernel_orig as u64;
+
         for data in files {
-            let chunker = FastChunker::new(chunk_size);
-            let mut handle = fs.create_file(format!("f{}", file_id), chunker).unwrap();
+            let mut inner_hasher = Sha256Hasher::default();
+            track_cdc_chunks(data, chunk_size, &mut cdc_sizes, &mut inner_hasher);
+
+            let write_chunker = FastChunker::new(chunk_size);
+            let mut handle = fs.create_file(format!("f{}", file_id), write_chunker).unwrap();
             fs.write_to_file(&mut handle, data).unwrap();
             fs.close_file(handle).unwrap();
             file_id += 1;
         }
+
+        let cdc_stored: usize = cdc_sizes.values().sum();
+        let cdc_ratio = original_total as f64 / cdc_stored as f64;
+
+        fs.scrub().unwrap();
+
+        let total_ratio = fs.total_dedup_ratio();
+        let orig_mb = original_total as f64 / (1024.0 * 1024.0);
+        let stored_mb = if total_ratio > 0.0 { orig_mb / total_ratio } else { 0.0 };
+        let total_elapsed = total_start.elapsed();
+
+        println!(
+            "{:<20} {:<8} cdc={:<7.4} total_dedup={:<7.4} stored={:<9.3} orig={:<9.3} elapsed={:<5.2}",
+            if idx == 0 { name } else { "" },
+            kernel_labels[idx],
+            cdc_ratio,
+            total_ratio,
+            stored_mb,
+            orig_mb,
+            total_elapsed.as_secs_f64(),
+        );
     }
-
-    let cdc_ratio = fs.cdc_dedup_ratio();
-    fs.scrub().unwrap();
-    let total_ratio = fs.total_dedup_ratio();
-    let elapsed = start.elapsed();
-
-    let stored_mb = (original_total as f64 / total_ratio) / (1024.0 * 1024.0);
-    let orig_mb = original_total as f64 / (1024.0 * 1024.0);
-    let mbps = if elapsed.as_secs_f64() > 0.0 {
-        original_total as f64 / elapsed.as_secs_f64() / (1024.0 * 1024.0)
-    } else {
-        0.0
-    };
-
-    println!(
-        "{:<20} cdc={:<8.4} tot={:<8.4} stored_mb={:<10.3} orig_mb={:<10.3} elapsed_s={:<10.2} mbps={:.2}",
-        name, cdc_ratio, total_ratio, stored_mb, orig_mb, elapsed.as_secs_f64(), mbps,
-    );
+    println!("\n")
 }
 
 fn main() {
@@ -101,6 +128,8 @@ fn main() {
         "/home/mak/RustroverProjects/marline/linux-3.4.6",
         "/home/mak/RustroverProjects/marline/linux-3.4.7",
     ];
+
+    let kernel_labels = ["3.4.5", "3.4.6", "3.4.7"];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
     for dir in &kernel_dirs {
@@ -111,8 +140,8 @@ fn main() {
     }
 
     println!(
-        "{:<20} {:<9} {:<9} {:<11} {:<11} {:<12} {:<12}",
-        "config", "cdc_ratio", "total_dedup_ratio", "stored_mb", "orig_mb", "elapsed_s", "mbps"
+        "{:<20} {:<8} {:<12} {:<20} {:<15} {:<15} {:<9}",
+        "config", "kernel", "cdc_ratio", "total_dedup", "stored_mb", "orig_mb", "elapsed"
     );
 
     for cfg in configs() {
@@ -134,7 +163,7 @@ fn main() {
                     sf_gen, GdeltaEncoder, tier_config,
                     LifecycleManager::<1>::default_configs(),
                 );
-                run_metrics(cfg.name, scrubber, &kernel_files);
+                run_metrics(cfg.name, scrubber, &kernel_files, &kernel_labels);
             }
             2 => {
                 let arr: [u32; 2] = cfg.tier_list.as_slice().try_into().unwrap();
@@ -143,7 +172,7 @@ fn main() {
                     sf_gen, GdeltaEncoder, tier_config,
                     LifecycleManager::<2>::default_configs(),
                 );
-                run_metrics(cfg.name, scrubber, &kernel_files);
+                run_metrics(cfg.name, scrubber, &kernel_files, &kernel_labels);
             }
             3 => {
                 let arr: [u32; 3] = cfg.tier_list.as_slice().try_into().unwrap();
@@ -152,7 +181,7 @@ fn main() {
                     sf_gen, GdeltaEncoder, tier_config,
                     LifecycleManager::<3>::default_configs(),
                 );
-                run_metrics(cfg.name, scrubber, &kernel_files);
+                run_metrics(cfg.name, scrubber, &kernel_files, &kernel_labels);
             }
             4 => {
                 let arr: [u32; 4] = cfg.tier_list.as_slice().try_into().unwrap();
@@ -161,7 +190,7 @@ fn main() {
                     sf_gen, GdeltaEncoder, tier_config,
                     LifecycleManager::<4>::default_configs(),
                 );
-                run_metrics(cfg.name, scrubber, &kernel_files);
+                run_metrics(cfg.name, scrubber, &kernel_files, &kernel_labels);
             }
             5 => {
                 let arr: [u32; 5] = cfg.tier_list.as_slice().try_into().unwrap();
@@ -170,7 +199,7 @@ fn main() {
                     sf_gen, GdeltaEncoder, tier_config,
                     LifecycleManager::<5>::default_configs(),
                 );
-                run_metrics(cfg.name, scrubber, &kernel_files);
+                run_metrics(cfg.name, scrubber, &kernel_files, &kernel_labels);
             }
             _ => unreachable!(),
         }
