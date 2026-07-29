@@ -48,10 +48,13 @@ impl<const N: usize> LifecycleManager<N> {
     }
 }
 
-impl LifecycleManager<1> {
-    pub fn default() -> Self {
+impl Default for LifecycleManager<1> {
+    fn default() -> Self {
         Self::new(Self::default_configs())
     }
+}
+
+impl LifecycleManager<1> {
     pub fn default_configs() -> [LifecycleTierConfig; 1] {
         [LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false)]
     }
@@ -66,11 +69,14 @@ impl LifecycleManager<2> {
     }
 }
 
-impl LifecycleManager<3> {
-    pub fn default() -> Self {
+impl Default for LifecycleManager<3> {
+    fn default() -> Self {
         let configs = Self::default_configs();
         Self::new(configs)
     }
+}
+
+impl LifecycleManager<3> {
 
     pub fn default_configs() -> [LifecycleTierConfig; 3] {
         [

@@ -3,9 +3,9 @@ use crate::tables::{FPTable, SFTable};
 use crate::types::{BlockID, SuperFeature, TierConfig};
 use crate::utils::lcm_vec;
 use chunkfs::ChunkHash;
+use marline_index::heuristic_index::SearchConfig;
 use marline_index::index::metrics::Metric;
 use marline_index::index::IndexError;
-use marline_index::heuristic_index::SearchConfig;
 
 pub type TierID = u8;
 
@@ -21,7 +21,11 @@ pub struct MetadataManager<H: ChunkHash + Send + Sync, const N: usize> {
 }
 
 impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
-    pub fn new(tier_config: TierConfig<N>, lifecycle_configs: [LifecycleTierConfig; N], search_config: &SearchConfig) -> Self {
+    pub fn new(
+        tier_config: TierConfig<N>,
+        lifecycle_configs: [LifecycleTierConfig; N],
+        search_config: &SearchConfig,
+    ) -> Self {
         let features_num = if let Some(fn_val) = tier_config.features_num {
             fn_val
         } else {
@@ -108,9 +112,13 @@ impl<H: ChunkHash + Send + Sync, const N: usize> MetadataManager<H, N> {
     }
 }
 
-impl<H: ChunkHash + Send + Sync> MetadataManager<H, 3> {
-    pub fn default() -> Self {
-        Self::new(TierConfig::new([4, 3, 2]), <LifecycleManager<3>>::default_configs(), &SearchConfig::default())
+impl<H: ChunkHash + Send + Sync> Default for MetadataManager<H, 3> {
+    fn default() -> Self {
+        Self::new(
+            TierConfig::new([4, 3, 2]),
+            <LifecycleManager<3>>::default_configs(),
+            &SearchConfig::default(),
+        )
     }
 }
 

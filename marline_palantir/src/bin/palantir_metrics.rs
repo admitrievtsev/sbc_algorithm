@@ -5,13 +5,13 @@ use std::time::Instant;
 use chunkfs::chunkers::{FastChunker, SizeParams};
 use chunkfs::hashers::Sha256Hasher;
 use chunkfs::{DataContainer, FileSystem};
+use marline_index::heuristic_index::SearchConfig;
 use marline_palantir::encoder::GdeltaEncoder;
 use marline_palantir::lifecycle_manager::LifecycleManager;
 use marline_palantir::mock_rocksdb::MockRocksDBMap;
 use marline_palantir::palantir_scrubber::PalantirScrubber;
 use marline_palantir::sf_generator::PalantirHasher;
 use marline_palantir::types::TierConfig;
-use marline_index::heuristic_index::SearchConfig;
 
 fn fmt_sc(sc: &SearchConfig) -> String {
     format!(
@@ -136,11 +136,7 @@ fn run_metrics(
 
 fn main() {
     // example data
-    let kernel_dirs = [
-        "your/path/to/data",
-        "your/path/to/data2",
-        "your/path/to/data3",
-    ];
+    let kernel_dirs = ["your/path/to/data", "your/path/to/data2", "your/path/to/data3"];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
     for dir in &kernel_dirs {
