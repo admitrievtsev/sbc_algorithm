@@ -56,6 +56,7 @@ impl PalantirHasher {
         Self { sampling_rate, linear_coefficients, tier_list, features_num }
     }
 
+    /// Dynamic override number of features per chunk
     pub fn with_features_num(sampling_rate: u64, tier_list: Vec<u32>, features_num: usize) -> Self {
         let mut linear_coefficients = Vec::with_capacity(features_num);
         for _ in 0..features_num {
