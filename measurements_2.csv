@@ -1,0 +1,2 @@
+iteration,cdc_dedup_ratio,sbc_dedup_ratio,cdc_time_ms,scrub_time_ms,total_time_ms
+1,160,160,48,1,50
