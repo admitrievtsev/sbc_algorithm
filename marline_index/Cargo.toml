@@ -15,7 +15,3 @@ tar = "0.4"
 [[bench]]
 name = "throughput"
 harness = false
-
-[[bench]]
-name = "heuristic_matrix"
-harness = false
