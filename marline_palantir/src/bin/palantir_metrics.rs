@@ -45,12 +45,13 @@ fn configs() -> Vec<Config> {
 }
 
 fn search_config_grid() -> Vec<SearchConfig> {
-    let min_jaccard = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 0.6];
-    let max_df = [None, Some(50), Some(100), Some(500), Some(25), Some(1000), Some(5000)];
-    let rare_first = [true, false];
-    let fp_threshold = [None, Some(1), Some(3)];
+    // your heuristics
+    let min_jaccard = [];
+    let max_df = [];
+    let rare_first = [];
+    let fp_threshold = [];
 
-    let mut configs = Vec::new();
+    let mut configs = vec![SearchConfig::default()];
     for &mj in &min_jaccard {
         for &md in &max_df {
             for &rf in &rare_first {
@@ -134,10 +135,11 @@ fn run_metrics(
 }
 
 fn main() {
+    // example data
     let kernel_dirs = [
-        "/home/mak/RustroverProjects/marline/linux-3.5.6",
-        "/home/mak/RustroverProjects/marline/linux-3.6.6",
-        "/home/mak/RustroverProjects/marline/linux-3.7.6",
+        "your/path/to/data",
+        "your/path/to/data2",
+        "your/path/to/data3",
     ];
 
     let mut kernel_files: Vec<Vec<Vec<u8>>> = Vec::new();
