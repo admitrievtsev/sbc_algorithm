@@ -1,0 +1,21 @@
+[package]
+name = "marline_index"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+marline_sketcher = { path = "../marline_sketcher" }
+bzip2 = "0.5"
+tar = "0.4"
+
+[[bench]]
+name = "throughput"
+harness = false
+
+[[bench]]
+name = "heuristic_matrix"
+harness = false
