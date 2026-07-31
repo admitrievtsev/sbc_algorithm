@@ -77,7 +77,6 @@ impl Default for LifecycleManager<3> {
 }
 
 impl LifecycleManager<3> {
-
     pub fn default_configs() -> [LifecycleTierConfig; 3] {
         [
             LifecycleTierConfig::new(0, |_| 0, |_| 0, |_| false),

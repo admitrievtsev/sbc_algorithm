@@ -145,14 +145,11 @@ where
                                             let ratio = delta_compressed.len() as f64
                                                 / simple_compressed.len() as f64;
                                             if ratio < self.fp_threshold {
-                                                target_map
-                                                    .insert(*hash, delta_compressed)?;
-                                                self.delta_bases
-                                                    .insert(*hash, base_hash.hash);
+                                                target_map.insert(*hash, delta_compressed)?;
+                                                self.delta_bases.insert(*hash, base_hash.hash);
                                                 self.delta_stored += 1;
                                             } else {
-                                                target_map
-                                                    .insert(*hash, chunk_data.clone())?;
+                                                target_map.insert(*hash, chunk_data.clone())?;
                                             }
                                         }
                                         Err(_) => {
